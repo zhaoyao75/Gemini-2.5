@@ -1,0 +1,16 @@
+{
+  "schema": "ppt-master.fact-provenance.v1",
+  "topic": "如何在抖音做好宠物猫动画短视频(12秒)",
+  "facts": [
+    {"fact_id": "F001", "claim": "行业文章称抖音综合完播、点赞、评论、转发、收藏等行为评估内容,新视频先进入小流量池,数据达标后逐级放量(非官方说法)", "source_title": "Five key metrics that help brands get on Douyin's algorithm", "source_url": "https://kawo.com/en/blog/five-key-metrics-that-help-brands-get-on-douyins-algorithm-and-gain-more-traffic", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F002", "claim": "有博客建议查看3秒完播率,若前3秒流失超过60%应优化开头(经验值,无官方来源)", "source_title": "How to Write Douyin Three-Second Hooks", "source_url": "https://shenbi-ai-frontend.pages.dev/en/guide/douyin-hook-writing/", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F003", "claim": "完播率=观看时长/视频时长,视频越长完播率越低,因此12秒超短视频更利于完播(依据定义的推论)", "source_title": "Douyin Algorithm's: discovery → content → purchase", "source_url": "https://ecommercechinaagency.com/douyin-algorithms-discovery-%E2%86%92-content-%E2%86%92-purchase/", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F004", "claim": "各机构给出的完播率目标不一致(35%、40%、55%以上),均非抖音官方数据", "source_title": "Douyin Algorithm's: discovery → content → purchase", "source_url": "https://ecommercechinaagency.com/douyin-algorithms-discovery-%E2%86%92-content-%E2%86%92-purchase/", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F005", "claim": "报道称AI宠物短剧是抖音热点,合集总播放量数十万常见,部分作品超过千万", "source_title": "宠物拟人短剧报道(人人都是产品经理)", "source_url": "https://www.woshipm.com/ai/6268247.html", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F006", "claim": "卡思数据建议基于宠物本身性格设定人设,而不是让猫狗模仿人类;品种外形与人设匹配,如大橘适配奋斗者", "source_title": "宠物账号人设与变现(卡思数据)", "source_url": "https://www.cbndata.com/information/170386", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F007", "claim": "拟人宠物短剧把职场压力、生活烦恼等现实话题转化为轻松剧情,提供情绪价值", "source_title": "宠物拟人短剧报道(人人都是产品经理)", "source_url": "https://www.woshipm.com/ai/6268247.html", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F008", "claim": "AI工具普及后技术门槛下降,内容与人设成为竞争核心", "source_title": "宠物拟人短剧报道(人人都是产品经理)", "source_url": "https://www.woshipm.com/ai/6268247.html", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F009", "claim": "宠物内容常见变现路径包括短视频带货与种草、IP周边小店、IP授权、广告与知识付费", "source_title": "宠物账号人设与变现(卡思数据)", "source_url": "https://www.cbndata.com/information/72001", "classification": "external", "retrieved_at": "2026-11-04"},
+    {"fact_id": "F010", "claim": "一位MCN负责人称娱乐向宠物内容的受众中真正养宠的只占15%-20%", "source_title": "宠物赛道观察(36氪)", "source_url": "https://www.36kr.com/p/1723525562369", "classification": "external", "retrieved_at": "2026-11-04"}
+  ]
+}

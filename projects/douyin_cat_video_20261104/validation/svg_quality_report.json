@@ -1,0 +1,424 @@
+{
+  "schema": "ppt-master.svg-quality-report.v1",
+  "stage": "final",
+  "target": "/home/user/Gemini-2.5/projects/douyin_cat_video_20261104",
+  "source_fingerprint": {
+    "algorithm": "sha256",
+    "digest": "c5dda54cb180854196d688f5542cb92329ecf5be9e31d08592c99dff6b4d8c36",
+    "file_count": 5,
+    "files": [
+      {
+        "file": "01_cover.svg",
+        "sha256": "30d1203b136da00b6922c183ba604fdb5b0755f6a1bfeeab80efb057647a67ab"
+      },
+      {
+        "file": "02_summary.svg",
+        "sha256": "4c9c6b02b84100fb1a1021d20eb107d291bf1f927088c2378c9abd1a00914123"
+      },
+      {
+        "file": "03_twelve_seconds.svg",
+        "sha256": "abdaa51bd529183bf977cc9d4dac3729890e2507f57fec179e9606574c1b6b06"
+      },
+      {
+        "file": "04_persona.svg",
+        "sha256": "e0ee83b1cdac8bd0fd29e682b2c65858a469e2482c6ee6a78ce62f59ad38e3d6"
+      },
+      {
+        "file": "05_next_steps.svg",
+        "sha256": "95e4230bf41ea61c83b3894c75f22acfc118bd4352524a34c9ef38c1003b8a93"
+      }
+    ]
+  },
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "warnings": 0,
+    "errors": 0
+  },
+  "issue_types": {},
+  "categories": {
+    "blocking": {
+      "count": 0,
+      "issues": []
+    },
+    "introduced": {
+      "count": 0,
+      "issues": []
+    },
+    "inherited": {
+      "count": 0,
+      "issues": []
+    },
+    "source-import": {
+      "count": 0,
+      "summary": {
+        "warning_count": 0,
+        "by_code": {}
+      }
+    }
+  },
+  "drift": {
+    "colors": {},
+    "fonts": {},
+    "sizes": {}
+  },
+  "carrier_receipt": {
+    "scope": "informational-not-a-quota",
+    "pages": 5,
+    "totals": {
+      "text_elements": 89,
+      "image_placements": 0,
+      "icons": 0,
+      "svg_geometry_elements": 60,
+      "preset_shapes": 13,
+      "page_frame_elements": 5,
+      "marker_uses": 0,
+      "inline_emphasis_runs": 0,
+      "gradient_uses": 0,
+      "filter_uses": 0,
+      "text_effects": 0
+    },
+    "pages_with": {
+      "images": 0,
+      "icons": 0,
+      "presets": 3,
+      "charts": 0,
+      "tables": 0,
+      "formulas": 0,
+      "inline_emphasis_runs": 0,
+      "gradient_uses": 0,
+      "filter_uses": 0,
+      "text_effects": 0
+    },
+    "relationship_pages": null,
+    "geometry_elements": {
+      "circle": 9,
+      "ellipse": 3,
+      "line": 25,
+      "path": 1,
+      "polygon": 0,
+      "polyline": 0,
+      "rect": 22
+    },
+    "preset_names": {
+      "chevron": 7,
+      "triangle": 6
+    },
+    "native_objects": {
+      "chart": 0,
+      "formula_block": 0,
+      "formula_inline": 0,
+      "other": 0,
+      "table": 0
+    },
+    "image_page_max_frame_share_range": []
+  },
+  "project_issues": {
+    "template": [],
+    "animation": [],
+    "illustration": [],
+    "communication_trace": [],
+    "pptx_structure": []
+  },
+  "files": [
+    {
+      "file": "01_cover.svg",
+      "path": "projects/douyin_cat_video_20261104/svg_output/01_cover.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 5,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "effects": {
+            "inline_emphasis_runs": 0,
+            "gradient_uses": 0,
+            "filter_uses": 0,
+            "text_effects": 0
+          },
+          "geometry": {
+            "svg_elements": {
+              "rect": 5,
+              "circle": 4,
+              "ellipse": 2,
+              "line": 4,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 1
+            },
+            "preset_shapes": 4,
+            "preset_names": {
+              "triangle": 4
+            },
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Arial, Microsoft YaHei"
+        ],
+        "text_elements": 5,
+        "tspan_elements": 1
+      },
+      "passed": true,
+      "source_sha256": "30d1203b136da00b6922c183ba604fdb5b0755f6a1bfeeab80efb057647a67ab"
+    },
+    {
+      "file": "02_summary.svg",
+      "path": "projects/douyin_cat_video_20261104/svg_output/02_summary.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 18,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "effects": {
+            "inline_emphasis_runs": 0,
+            "gradient_uses": 0,
+            "filter_uses": 0,
+            "text_effects": 0
+          },
+          "geometry": {
+            "svg_elements": {
+              "rect": 4,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 4,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Arial",
+          "Arial, Microsoft YaHei"
+        ],
+        "text_elements": 18,
+        "tspan_elements": 9
+      },
+      "passed": true,
+      "source_sha256": "4c9c6b02b84100fb1a1021d20eb107d291bf1f927088c2378c9abd1a00914123"
+    },
+    {
+      "file": "03_twelve_seconds.svg",
+      "path": "projects/douyin_cat_video_20261104/svg_output/03_twelve_seconds.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 34,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "effects": {
+            "inline_emphasis_runs": 0,
+            "gradient_uses": 0,
+            "filter_uses": 0,
+            "text_effects": 0
+          },
+          "geometry": {
+            "svg_elements": {
+              "rect": 7,
+              "circle": 0,
+              "ellipse": 0,
+              "line": 13,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 4,
+            "preset_names": {
+              "chevron": 4
+            },
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Arial, Microsoft YaHei"
+        ],
+        "text_elements": 34,
+        "tspan_elements": 8
+      },
+      "passed": true,
+      "source_sha256": "abdaa51bd529183bf977cc9d4dac3729890e2507f57fec179e9606574c1b6b06"
+    },
+    {
+      "file": "04_persona.svg",
+      "path": "projects/douyin_cat_video_20261104/svg_output/04_persona.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 19,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "effects": {
+            "inline_emphasis_runs": 0,
+            "gradient_uses": 0,
+            "filter_uses": 0,
+            "text_effects": 0
+          },
+          "geometry": {
+            "svg_elements": {
+              "rect": 4,
+              "circle": 3,
+              "ellipse": 0,
+              "line": 4,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 0,
+            "preset_names": {},
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Arial",
+          "Arial, Microsoft YaHei"
+        ],
+        "text_elements": 19,
+        "tspan_elements": 7
+      },
+      "passed": true,
+      "source_sha256": "e0ee83b1cdac8bd0fd29e682b2c65858a469e2482c6ee6a78ce62f59ad38e3d6"
+    },
+    {
+      "file": "05_next_steps.svg",
+      "path": "projects/douyin_cat_video_20261104/svg_output/05_next_steps.svg",
+      "exists": true,
+      "errors": [],
+      "warnings": [],
+      "info": {
+        "viewbox": "0 0 1280 720",
+        "carrier_receipt": {
+          "text_elements": 13,
+          "images": {
+            "placements": 0,
+            "files": [],
+            "max_frame_share": 0.0
+          },
+          "icons": 0,
+          "effects": {
+            "inline_emphasis_runs": 0,
+            "gradient_uses": 0,
+            "filter_uses": 0,
+            "text_effects": 0
+          },
+          "geometry": {
+            "svg_elements": {
+              "rect": 2,
+              "circle": 2,
+              "ellipse": 1,
+              "line": 0,
+              "polyline": 0,
+              "polygon": 0,
+              "path": 0
+            },
+            "preset_shapes": 5,
+            "preset_names": {
+              "chevron": 3,
+              "triangle": 2
+            },
+            "page_frame_elements": 1,
+            "marker_uses": {
+              "start": 0,
+              "mid": 0,
+              "end": 0
+            }
+          },
+          "native_objects": {
+            "chart": 0,
+            "table": 0,
+            "formula_block": 0,
+            "formula_inline": 0,
+            "other": 0
+          }
+        },
+        "fonts": [
+          "Arial, Microsoft YaHei"
+        ],
+        "text_elements": 13,
+        "tspan_elements": 9
+      },
+      "passed": true,
+      "source_sha256": "95e4230bf41ea61c83b3894c75f22acfc118bd4352524a34c9ef38c1003b8a93"
+    }
+  ]
+}

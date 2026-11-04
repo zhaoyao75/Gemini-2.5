@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" lang="zh-CN" data-pptx-page-role="ending" font-family="Arial, Microsoft YaHei">
+<rect id="bg" data-pptx-role="background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+<g id="header" data-pptx-bounds="72 60 1136 100">
+<text x="72" y="100" font-size="36" font-weight="bold" fill="#0B1F3A">先用一周小批量验证，再决定要不要做成IP</text>
+<text x="72" y="148" font-size="26" fill="#14181F">下一步：这周先发5条12秒，用后台数据决定是否放大。</text>
+</g>
+<g id="step-spine" data-pptx-bounds="72 200 1136 70">
+<g id="p05-stage-1" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="chevron" data-pptx-frame="72 206 380 56" data-pptx-av-adj="val 30000" fill="#FF5A1F" stroke="none">
+<path d="M 72 206 L 435.2 206 L 452 234 L 435.2 262 L 72 262 L 88.8 234 Z" />
+</g>
+<g id="p05-stage-2" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="chevron" data-pptx-frame="439 206 380 56" data-pptx-av-adj="val 30000" fill="#0B1F3A" stroke="none">
+<path d="M 439 206 L 802.2 206 L 819 234 L 802.2 262 L 439 262 L 455.8 234 Z" />
+</g>
+<g id="p05-stage-3" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="chevron" data-pptx-frame="806 206 402 56" data-pptx-av-adj="val 30000" fill="#0B1F3A" stroke="none">
+<path d="M 806 206 L 1191.2 206 L 1208 234 L 1191.2 262 L 806 262 L 822.8 234 Z" />
+</g>
+<text x="96" y="241" font-size="22" font-weight="bold" fill="#14181F">试发 · 第1周</text>
+<text x="463" y="241" font-size="22" font-weight="bold" fill="#FFFFFF">看数 · 第2周</text>
+<text x="830" y="241" font-size="22" font-weight="bold" fill="#FFFFFF">放大 · 第3周起</text>
+</g>
+<g id="step-col-1" data-pptx-bounds="72 290 360 200">
+<text x="96" y="312" font-size="22" fill="#14181F">围绕同一只猫的<tspan x="96" dy="34">人设，连发5条12秒</tspan><tspan x="96" dy="34">小剧情（建议值）。</tspan></text>
+</g>
+<g id="step-col-2" data-pptx-bounds="439 290 360 200">
+<text x="463" y="312" font-size="22" fill="#14181F">在创作者后台看<tspan x="463" dy="34">3秒完播率与整体</tspan><tspan x="463" dy="34">完播率；3秒流失</tspan><tspan x="463" dy="34">偏高就先改开头。</tspan></text>
+<text x="463" y="470" font-size="16" fill="#5A6270">行业经验：流失超过60%</text>
+</g>
+<g id="step-col-3" data-pptx-bounds="806 290 360 200">
+<text x="830" y="312" font-size="22" fill="#14181F">数据稳定、人设<tspan x="830" dy="34">被记住后，再考虑</tspan><tspan x="830" dy="34">带货、周边、授权</tspan><tspan x="830" dy="34">等变现方式。</tspan></text>
+</g>
+<g id="caveat" data-pptx-bounds="72 520 1136 120">
+<rect x="72" y="520" width="1136" height="120" fill="#0B1F3A" />
+<text x="100" y="552" font-size="16" font-weight="bold" fill="#FF5A1F">使用提醒</text>
+<text x="100" y="590" font-size="26" fill="#FFFFFF">本报告的数字均来自第三方文章，属行业经验值，不是抖音官方标准；<tspan x="100" dy="38">正式投入前，请以抖音创作者中心的说明和你自己的后台数据为准。</tspan></text>
+<g id="p05-ear-l" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="triangle" data-pptx-frame="1112 546 32 40" fill="#FF5A1F" stroke="none">
+<path d="M 1112 586 L 1128 546 L 1144 586 Z" />
+</g>
+<g id="p05-ear-r" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="triangle" data-pptx-frame="1156 546 32 40" fill="#FF5A1F" stroke="none">
+<path d="M 1156 586 L 1172 546 L 1188 586 Z" />
+</g>
+<ellipse cx="1150" cy="602" rx="44" ry="36" fill="#FF5A1F" />
+<circle cx="1135" cy="598" r="5" fill="#0B1F3A" />
+<circle cx="1165" cy="598" r="5" fill="#0B1F3A" />
+</g>
+<g id="footer" data-pptx-bounds="72 672 1136 28" fill="#5A6270" font-size="14">
+<text x="72" y="686">资料：卡思数据、Kawo、神笔 AI 等公开文章整理；一周节奏与5条数量为本报告的建议值。</text>
+<text x="1208" y="686" text-anchor="end">05</text>
+</g>
+</svg>

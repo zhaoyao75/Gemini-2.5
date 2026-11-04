@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" lang="zh-CN" data-pptx-page-role="cover" font-family="Arial, Microsoft YaHei">
+<rect id="bg" data-pptx-role="background" x="0" y="0" width="1280" height="720" fill="#FFFFFF"/>
+<g id="cover-title" data-pptx-bounds="72 160 700 330">
+<text x="72" y="180" font-size="16" fill="#5A6270">咨询报告 | 短视频内容策略</text>
+<rect x="72" y="214" width="72" height="8" fill="#FF5A1F"/>
+<text x="72" y="300" font-size="64" font-weight="bold" fill="#0B1F3A">12秒，让一只猫<tspan x="72" dy="84">留住观众</tspan></text>
+<text x="72" y="470" font-size="26" fill="#14181F">如何在抖音做好宠物猫动画短视频</text>
+</g>
+<g id="cover-meta" data-pptx-bounds="72 620 700 32">
+<text x="72" y="640" font-size="16" fill="#5A6270">基于公开行业资料整理（非抖音官方）· 2026年11月</text>
+</g>
+<g id="cover-cat" data-pptx-bounds="800 0 480 720">
+<rect x="800" y="0" width="480" height="720" fill="#0B1F3A"/>
+<g id="cat-ears" data-pptx-bounds="930 236 220 110">
+<g id="p01-ear-l" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="triangle" data-pptx-frame="930 236 96 110" fill="#FF5A1F" stroke="none">
+<path d="M 930 346 L 978 236 L 1026 346 Z"/>
+</g>
+<g id="p01-ear-r" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="triangle" data-pptx-frame="1054 236 96 110" fill="#FF5A1F" stroke="none">
+<path d="M 1054 346 L 1102 236 L 1150 346 Z"/>
+</g>
+<g id="p01-inner-l" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="triangle" data-pptx-frame="952 266 52 62" fill="#FFB08A" stroke="none">
+<path d="M 952 328 L 978 266 L 1004 328 Z"/>
+</g>
+<g id="p01-inner-r" data-pptx-authoring="preset" data-pptx-object="shape" data-pptx-prst="triangle" data-pptx-frame="1076 266 52 62" fill="#FFB08A" stroke="none">
+<path d="M 1076 328 L 1102 266 L 1128 328 Z"/>
+</g>
+</g>
+<ellipse cx="1040" cy="392" rx="150" ry="124" fill="#FF5A1F"/>
+<circle cx="985" cy="384" r="15" fill="#0B1F3A"/>
+<circle cx="1095" cy="384" r="15" fill="#0B1F3A"/>
+<circle cx="990" cy="378" r="5" fill="#FFFFFF"/>
+<circle cx="1100" cy="378" r="5" fill="#FFFFFF"/>
+<ellipse cx="1040" cy="414" rx="11" ry="8" fill="#0B1F3A"/>
+<path d="M 1040 422 L 1040 436 M 1040 436 Q 1024 452 1004 440 M 1040 436 Q 1056 452 1076 440" fill="none" stroke="#0B1F3A" stroke-width="4"/>
+<line x1="890" y1="424" x2="830" y2="410" stroke="#FFFFFF" stroke-width="2.5"/>
+<line x1="890" y1="440" x2="830" y2="446" stroke="#FFFFFF" stroke-width="2.5"/>
+<line x1="1190" y1="424" x2="1250" y2="410" stroke="#FFFFFF" stroke-width="2.5"/>
+<line x1="1190" y1="440" x2="1250" y2="446" stroke="#FFFFFF" stroke-width="2.5"/>
+<text x="860" y="598" font-size="40" font-weight="bold" fill="#FFFFFF">00:12</text>
+<rect x="860" y="628" width="360" height="8" fill="#FFFFFF" fill-opacity="0.25"/>
+<rect x="860" y="628" width="360" height="8" fill="#FF5A1F"/>
+</g>
+</svg>

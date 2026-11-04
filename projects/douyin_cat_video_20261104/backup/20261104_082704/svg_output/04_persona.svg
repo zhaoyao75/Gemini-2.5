@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" lang="zh-CN" data-pptx-page-role="content" font-family="Arial, Microsoft YaHei">
+<rect id="bg" data-pptx-role="background" x="0" y="0" width="1280" height="720" fill="#FFFFFF" />
+<g id="audience-plane" data-pptx-bounds="0 0 480 720">
+<rect x="0" y="0" width="480" height="720" fill="#0B1F3A" />
+<text x="72" y="100" font-size="16" fill="#FFFFFF" fill-opacity="0.7">受众基础</text>
+<text x="72" y="250" font-size="96" font-weight="bold" font-family="Arial" fill="#FF5A1F">15–20%</text>
+<text x="72" y="312" font-size="22" fill="#FFFFFF">娱乐向宠物内容的受众里，<tspan x="72" dy="34">真正养宠的只占这个比例</tspan><tspan x="72" dy="34">（一位 MCN 负责人的说法）。</tspan></text>
+<line x1="72" y1="430" x2="408" y2="430" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="1" />
+<text x="72" y="474" font-size="22" font-weight="bold" fill="#FFFFFF">所以角色要让不养宠的<tspan x="72" dy="34">人也看得懂、愿意看。</tspan></text>
+<text x="72" y="552" font-size="16" fill="#FFFFFF" fill-opacity="0.7">（本报告推论）</text>
+</g>
+<g id="header" data-pptx-bounds="540 60 668 150">
+<text x="540" y="100" font-size="36" font-weight="bold" fill="#0B1F3A">人设比画技更重要：先定性格，<tspan x="540" dy="45">再让猫的一切行为都自洽</tspan></text>
+<text x="540" y="190" font-size="26" fill="#14181F">三步定人设（本报告整理）</text>
+</g>
+<g id="step-1" data-pptx-bounds="540 220 668 118">
+<line x1="540" y1="220" x2="1208" y2="220" stroke="#D5D8DD" stroke-width="1" />
+<circle cx="562" cy="254" r="22" fill="#0B1F3A" />
+<text x="562" y="262" font-size="22" font-weight="bold" text-anchor="middle" fill="#FFFFFF">1</text>
+<text x="606" y="262" font-size="26" font-weight="bold" fill="#0B1F3A">看性格：先观察猫本身</text>
+<text x="606" y="298" font-size="22" fill="#14181F">不让猫模仿人类，而是基于它<tspan x="606" dy="32">的性格与外形来设定人设。</tspan></text>
+</g>
+<g id="step-2" data-pptx-bounds="540 338 668 118">
+<line x1="540" y1="338" x2="1208" y2="338" stroke="#D5D8DD" stroke-width="1" />
+<circle cx="562" cy="372" r="22" fill="#0B1F3A" />
+<text x="562" y="380" font-size="22" font-weight="bold" text-anchor="middle" fill="#FFFFFF">2</text>
+<text x="606" y="380" font-size="26" font-weight="bold" fill="#0B1F3A">贴人设：让外形匹配性格</text>
+<text x="606" y="416" font-size="22" fill="#14181F">例如：大橘适配“奋斗者”，<tspan x="606" dy="32">角色一出场就有记忆点。</tspan></text>
+</g>
+<g id="step-3" data-pptx-bounds="540 456 668 118">
+<line x1="540" y1="456" x2="1208" y2="456" stroke="#D5D8DD" stroke-width="1" />
+<circle cx="562" cy="490" r="22" fill="#0B1F3A" />
+<text x="562" y="498" font-size="22" font-weight="bold" text-anchor="middle" fill="#FFFFFF">3</text>
+<text x="606" y="498" font-size="26" font-weight="bold" fill="#0B1F3A">讲小事：把现实烦恼变轻松</text>
+<text x="606" y="534" font-size="22" fill="#14181F">把职场压力、生活烦恼等现实话题<tspan x="606" dy="32">演成轻松的小剧情，提供情绪价值。</tspan></text>
+</g>
+<g id="avoid" data-pptx-bounds="540 582 668 70">
+<rect x="540" y="582" width="668" height="70" fill="#F3F2EE" />
+<rect x="540" y="582" width="6" height="70" fill="#FF5A1F" />
+<text x="566" y="608" font-size="16" font-weight="bold" fill="#5A6270">避免（本报告整理）</text>
+<text x="566" y="636" font-size="22" fill="#14181F">让猫硬学人类行为；一条12秒视频塞多个梗。</text>
+</g>
+<g id="footer" data-pptx-bounds="540 672 668 28" fill="#5A6270" font-size="14">
+<text x="540" y="686">资料：卡思数据、人人都是产品经理、36氪等公开文章整理，非抖音官方。</text>
+<text x="1208" y="686" text-anchor="end">04</text>
+</g>
+</svg>
