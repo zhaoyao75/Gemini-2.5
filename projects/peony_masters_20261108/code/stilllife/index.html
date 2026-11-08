@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}</style></head>
+<body><canvas id="c"></canvas>
+<script src="scene.js"></script><script src="painter.js"></script>
+<script>
+// usage: index.html?style=vangogh_sunflowers&w=900
+const q = new URLSearchParams(location.search);
+const style = q.get('style') || 'composition', w = +(q.get('w') || 900);
+const s = document.createElement('script'); s.src = 'styles/' + style + '.js';
+s.onload = () => { const c = document.getElementById('c'); c.width = w; c.height = Math.round(w * SCENE.ASPECT); SCENE.build(c.width); P.init(c); P.setSeed(12345); STYLES[style].paint(); window.DONE = true; };
+document.body.appendChild(s);
+</script></body></html>
