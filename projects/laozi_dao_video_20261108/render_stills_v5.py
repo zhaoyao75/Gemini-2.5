@@ -532,7 +532,7 @@ def shot1():
     rgb = draw_rock(rgb, m)
     iy = GROUND - 300
     ix = float(np.nonzero(m[iy] > .5)[0][0]) + 6
-    rgb = glow(rgb, ix, iy, 90, GOLD, .9)
+    rgb = glow(rgb, ix, iy, 55, GOLD, .45)
     L = Layer()
     rock_details(L, m)
     pebbles_and_grass(L)
@@ -544,8 +544,8 @@ def shot1():
     hand = ((hx + hx2) / 2, (hy + hy2) / 2)
     ang = math.atan2(iy - hand[1], ix - hand[0])
     sword(L, hand, ang, math.hypot(ix - hand[0], iy - hand[1]) + 6)
-    starburst(L, ix, iy, 80, 30, 9, (255, 246, 205, 255), .2)
-    starburst(L, ix, iy, 48, 20, 9, (255, 255, 255, 255), .6)
+    starburst(L, ix, iy, 52, 20, 9, (255, 246, 205, 255), .2)
+    starburst(L, ix, iy, 30, 12, 9, (255, 255, 255, 255), .6)
     g = np.random.default_rng(8)
     for _ in range(20):
         a = g.uniform(-math.pi, .1)
@@ -616,7 +616,7 @@ def shot3():
         water_drop(L, DRIP_X, yv, 10 + (k % 2) * 3, 235)
     ring(L, DRIP_X, top + 10, 60, 200, 3)
     # big time labels: growing size = time passing
-    for txt, y, size in (("1天", 410, 110), ("1年", 600, 140), ("10年", 810, 170)):
+    for txt, y, size in (("1天", 420, 100), ("1年", 600, 120), ("10年", 790, 140)):
         pop_text(L, txt, (330, y), size, 0, GOLD + (255,), (40, 22, 6, 255), BOLD)
     for y in (505, 705):
         L.poly([(308, y - 12), (352, y - 12), (330, y + 16)], IVORY + (230,))
@@ -684,7 +684,6 @@ def shot5():
     rgb = glow(rgb, W / 2, 640, 80, AQUA, .6)
     for k, ch in enumerate("柔弱胜刚强"):
         L.text((W / 2 + (k - 2) * 182, 1010), ch, (CAL, 176), IVORY + (255,))
-    L.im.alpha_composite(seal_img(120).rotate(-6, resample=Image.BICUBIC, expand=True).resize((int(130 * SS), int(130 * SS))), ((W - 230) * SS, 1080 * SS))
     rgb = stamp(rgb, L)
     img = finish(rgb)
     d = ImageDraw.Draw(img)
