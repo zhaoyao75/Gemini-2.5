@@ -122,7 +122,7 @@ POSES = {
 }
 
 
-def draw_youth(cv, pose, ox, oy, s, face=1):
+def draw_youth(cv, pose, ox, oy, s, face=1, ph=0.0):
     p = POSES[pose]
     T = lambda q: (ox + q[0] * s * face, oy - q[1] * s)
     pel, nek, hd = T(p["pelvis"]), T(p["neck"]), T(p["head"])
@@ -165,7 +165,7 @@ def draw_youth(cv, pose, ox, oy, s, face=1):
     d.arc([hx - r * 1.02, hy - r * 1.02, hx + r * 1.02, hy + r * 1.02], 200 + ang, 340 + ang, fill=RED + (255,), width=int(r * .32))
     bx, by = hx - face * r * .9 * math.cos(tilt), hy - r * .45
     for k, (amp, ln) in enumerate(((.10, .55), (.06, .42))):
-        pts = [(bx - face * u * ln * s, by + math.sin(u * 7 + k) * amp * s * u + u * .05 * s * (k + 1)) for u in np.linspace(0, 1, 14)]
+        pts = [(bx - face * u * ln * s, by + math.sin(u * 7 + k + ph) * amp * s * u + u * .05 * s * (k + 1)) for u in np.linspace(0, 1, 14)]
         stroke(d, pts, r * .22, r * .04, RED + (240,), r * .24)
     # face: eye + brow (looking along face direction)
     ex, ey = hx + face * r * .45, hy - r * .02
