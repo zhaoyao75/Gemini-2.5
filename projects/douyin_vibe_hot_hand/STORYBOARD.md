@@ -15,7 +15,7 @@
 | **B 球迷都信** | 3 | 3.3–5.7s | 一屏小圆点（球迷），逐个亮成金色，中央大字「手感」 | 几乎所有球迷和教练，都相信有「手感」 / Nearly every fan and coach believes in the hot hand. | 圆点亮起的细碎 tick | #1 |
 | **C 1985 论文** | 6 | 5.7–10.4s | 做旧纸质论文页：COGNITIVE PSYCHOLOGY · 1985 / The Hot Hand in Basketball / Gilovich · Vallone · Tversky；第 3 拍盖红章「手感是错觉」；下方注：76 人队投篮 · 凯尔特人罚球 · 康奈尔球员实验；标「图为示意」 | 1985 年，三位心理学家分析了投篮数据 / In 1985, three psychologists analysed shooting data.<br>结论：「手感」只是错觉 / Their verdict: the hot hand is a fallacy. | 纸张滑入 whoosh；盖章 thud | #2 #3 |
 | **D 影响** | 4 | 10.4–13.5s | 三个线条图标依次浮现：股市曲线、骰子、彩票球 | 这个结论成了经典，被用来解释股市、赌博和彩票 / It became canonical — used to explain markets, gambling and lotteries. | 3 次 tick | #4 |
-| **E 转折** | 4 | 13.5–16.6s | 第二张论文页：ECONOMETRICA · NOVEMBER 2018 / Surprised by the Hot Hand Fallacy? / Miller · Sanjurjo；盖红章「方法有偏差」；画面整体色调变冷再回暖 | 直到 2018 年，两位经济学家发现—— / Until 2018, when two economists found —<br>当年的统计方法，本身就有偏差 / the method itself was biased. | swell 上扬；盖章 thud | #5 |
+| **E 转折** | 4 | 13.5–16.6s | 第二张论文页：ECONOMETRICA · NOVEMBER 2018 / Surprised by the Hot Hand Fallacy? / Miller · Sanjurjo；盖红章「方法有偏差」；画面整体色调变冷再回暖 | 这个结论，科学家错了 30 年 / Scientists got this wrong for 30 years —<br>直到 2018 年，统计方法的偏差才被发现 / until 2018, when the method's bias was found. | swell 上扬；盖章 thud | #5 |
 | **F1 规则** | 4 | 16.6–19.7s | 规则卡：① 抛 3 次公平硬币 ② 只看每个「正面」之后的那一次 ③ 算这些次里正面占几成；金/黑硬币图标，下划线 = 被记录的那一次 | 抛 3 次公平硬币，只看每个「正面」后的那一次 / Flip a fair coin 3 times. Only look at the flip right after each head. | 规则逐条 tick | #6 |
 | **F2 8 种结果** | 8 | 19.7–25.9s | 8 行表格，每拍出一行：HHH→100%，HHT→50%，HTH→0，HTT→0，THH→100%，THT→0，TTH→—，TTT→—；被记录的硬币加下划线；最后两行置灰划掉 | 8 种结果，出现的机会一样大 / Eight outcomes, all equally likely.<br>后两行没有可记的，作废 / The last two rows have nothing to record — discard. | 每行出现一次硬币 tick | #6 |
 | **F3 平均** | 4 | 25.9–29.1s | 算式 (100% + 50% + 0 + 0 + 100% + 0) ÷ 6 → 5/12 → 大号数字滚到 41.7%；旁边一条 50% 虚线，差距高亮 | 「正面」之后还是正面，平均只有 41.7% / Heads after heads: only 41.7% on average. | 数字滚动 tick，落定 ding | #6 |
@@ -56,14 +56,14 @@
 
 ## 要特别小心的地方
 
-1. **措辞红线**：不说「手感被证明存在」，不说「科学家错了」。字幕已按「未必是错觉」「方法有偏差」写。
+1. **措辞红线**：「科学家错了 30 年」经确认保留（指 1985 年研究的结论被后来的分析翻转，见 FACTS.md）；不说「手感被证明存在」，结尾只说「未必是错觉」。
 2. **选择偏差很抽象**：靠 F2 的 8 行表格讲清楚，宁可多停两拍；G 的模拟是给「球场不是抛硬币」的观众一个落点。
 3. **「+13」只来自一组 26 人的控制实验**：H 场景必须带「26 人 × 100 球」小注，J 场景明说争议未完。
 4. **所有示意画面标注**：论文页「图为示意」；G 场景标「本片模拟」；开头 Tim 与球迷圆点是示意，不是真实数据。
 
 ## 发布文案草稿
 
-- 标题：`Vibe知识大赏｜《手感，是错觉吗？》连中三球，下一球更容易进吗？`
+- 标题：`Vibe知识大赏｜《手感，是错觉吗？》科学家错了30年？`
 - 标签：`#vibe知识大赏 #热手谬误 #统计学 #篮球 #概率`
 - 置顶评论：参考文献 ① Gilovich, Vallone & Tversky (1985), Cognitive Psychology 17(3), 295–314；② Miller & Sanjurjo (2018), Econometrica 86(6), 2019–2047（arXiv:1902.01265）；③ 「46.1% / 53.9%」为本片 20 万次模拟，脚本见仓库 `projects/douyin_vibe_hot_hand/verify_streak_bias.py`；④「本片由 AI 编写代码生成，无实拍素材」。
 - 发布页勾选「内容由AI生成」。

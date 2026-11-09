@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>手感，是错觉吗？</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-serif-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/eb-garamond/400-italic.css">
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Every frame is a pure function of time t (seconds). No requestAnimationFrame,
+// no Date, no unseeded randomness — so frame-by-frame rendering is repeatable.
+const TL = window.TL;                 // injected by render.js from timeline.json
+const BEAT = 60 / TL.bpm;
+const b = n => n * BEAT;              // beat index -> seconds
+// The title card lasts INTRO seconds; beat n >= TB is placed INTRO + (n - TB) beats into the video.
+const INTRO = TL.intro_seconds, TB = TL.scenes_beats.D_title[1];
+const T = n => n < TB ? n / TB * INTRO : INTRO + (n - TB) * BEAT;
+const S = Object.fromEntries(Object.entries(TL.scenes_beats).map(([k, [s, e]]) => [k, [T(s), T(e)]]));
+const DURATION = T(TL.total_beats) + TL.tail_seconds;
+
+const W = 1920, H = 1080;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---------- palette & fonts ----------
+const C = {
+  bgIn: '#0e0e0e', bgOut: '#000000',
+  text: '#EAEAF2', gray: '#8E8E93', gold: '#C9A96A', goldHi: '#E8CF94',
+  paper: '#EDE4D3', red: '#B53A2F',
+};
+const F = {
+  serif: '"Noto Serif SC"',
+  sans: '"Noto Sans SC"',
+  en: '"EB Garamond"',
+};
+
+// ---------- math helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const easeIO = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// fade in over fi, hold, fade out over fo, inside [t0, t1]
+const window01 = (t, t0, t1, fi = 0.4, fo = 0.35) => Math.min(prog(t, t0, t0 + fi), 1 - prog(t, t1 - fo, t1));
+
+// ---------- static random fields (seeded) ----------
+const STARS = (() => { const r = mulberry32(7); return Array.from({ length: 220 }, () => ({ x: r() * W, y: r() * H, s: 0.4 + r() * 1.3, ph: r() * 6.28, sp: 0.4 + r() * 1.2 })); })();
+const DUST = (() => { const r = mulberry32(11); return Array.from({ length: 46 }, () => ({ x: r() * W, y: r() * H, s: 0.8 + r() * 2.2, vx: (r() - .5) * 14, vy: -6 - r() * 16, ph: r() * 6.28 })); })();
+
+// ---------- text helpers ----------
+function text(str, x, y, { size = 40, family = F.sans, weight = 400, color = C.text, align = 'center', alpha = 1, italic = false, spacing = 0, baseline = 'alphabetic' } = {}) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${family}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  ctx.letterSpacing = spacing + 'px';
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// Bilingual subtitle band at 85–91% height
+function subtitle(t, t0, t1, zh, en) {
+  const a = window01(t, t0, t1);
+  if (a <= 0) return;
+  const rise = (1 - easeOut(prog(t, t0, t0 + 0.4))) * 8;
+  text(zh, W / 2, 948 + rise, { size: 46, weight: 700, alpha: a, spacing: 2 });
+  text(en, W / 2, 996 + rise, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+}
+
+// Small note band at ~70% height
+function note(t, t0, t1, str, x = W / 2, y = 790) {
+  const a = window01(t, t0, t1, 0.35, 0.3);
+  text(str, x, y, { size: 24, color: C.gray, alpha: a, spacing: 1 });
+}
+
+function topLabel(t, t0, t1, str) {
+  const a = window01(t, t0, t1, 0.5, 0.4);
+  if (a <= 0) return;
+  text(str, W / 2, 74, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+  ctx.save(); ctx.globalAlpha = a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92); ctx.lineTo(W / 2 + 40, 92); ctx.stroke(); ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function heart(x, y, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, 3);
+  ctx.bezierCurveTo(-7, -3, -4, -9, 0, -5); ctx.bezierCurveTo(4, -9, 7, -3, 0, 3);
+  ctx.fill(); ctx.restore();
+}
+
+function glowDot(x, y, r, color, glow, alpha = 1) {
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * glow);
+  g.addColorStop(0, color); g.addColorStop(0.25, color.replace(/[\d.]+\)$/, '0.35)')); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * glow, 0, 6.283); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- background ----------
+function background(t, frame) {
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, 80, W / 2, H * 0.5, W * 0.7);
+  g.addColorStop(0, C.bgIn); g.addColorStop(1, C.bgOut);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of STARS) {
+    const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * s.sp + s.ph));
+    ctx.fillStyle = `rgba(220,220,240,${a})`;
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+}
+function dust(t, alpha = 1) {
+  for (const d of DUST) {
+    const x = ((d.x + d.vx * t) % W + W) % W;
+    const y = ((d.y + d.vy * t) % H + H) % H;
+    const a = alpha * (0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.3 + d.ph)));
+    ctx.fillStyle = `rgba(232,207,148,${a})`;
+    ctx.beginPath(); ctx.arc(x, y, d.s, 0, 6.283); ctx.fill();
+  }
+}
+function finish(t, frame) {
+  // vignette
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // film grain, reseeded every frame
+  const r = mulberry32(1000 + frame);
+  for (let i = 0; i < 1800; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(r() * W, r() * H, 2, 2);
+  }
+  // watermark
+  text(TL.watermark, 60, 74, { size: 24, align: 'left', color: C.text, alpha: 0.35 });
+  // end fade (sample only)
+  const k = prog(t, DURATION - 0.6, DURATION);
+  if (k > 0) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- title card (opens the video, 1 s) ----------
+function sceneTitle(t) {
+  const [d0, d1] = S.D_title;
+  const a = window01(t, d0 - 1, d1, 0.4, 0.15);   // fully visible on frame 0, fades out over its last 0.15 s
+  if (a <= 0) return;
+  const lt = t - d0;
+  dust(t, a);
+  ctx.save();
+  const s = lerp(1.05, 1, easeOut(prog(lt, 0, 0.8)));
+  ctx.translate(W / 2, 500); ctx.scale(s, s);
+  const g = ctx.createLinearGradient(-560, 0, 560, 0);
+  const sw = clamp(lt / 0.8, 0, 1);              // one quick highlight sweep
+  g.addColorStop(0, '#B8935A'); g.addColorStop(clamp(sw - 0.12), '#C9A96A'); g.addColorStop(sw, '#FFF0C8'); g.addColorStop(clamp(sw + 0.12), '#C9A96A'); g.addColorStop(1, '#B8935A');
+  ctx.globalAlpha = a; ctx.font = `900 92px ${F.serif}`; ctx.textAlign = 'center'; ctx.fillStyle = g;
+  ctx.shadowColor = 'rgba(232,207,148,0.35)'; ctx.shadowBlur = 30;
+  ctx.fillText('《手感，是错觉吗？》', 0, 0);
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha = a * 0.6; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  const lw = lerp(120, 220, easeOut(prog(lt, 0, 0.3)));
+  ctx.beginPath(); ctx.moveTo(W / 2 - lw, 560); ctx.lineTo(W / 2 + lw, 560); ctx.stroke(); ctx.restore();
+  text('热手谬误', W / 2, 626, { size: 40, weight: 700, alpha: a, spacing: 10 });
+  text('The Hot Hand Fallacy', W / 2, 678, { size: 32, family: F.en, italic: true, color: C.gray, alpha: a });
+}
+
+// =====================================================================
+//  《手感，是错觉吗？》 scenes
+// =====================================================================
+const BLUE = '#8fb0ff';
+function numDot(x, y, n, a) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = C.gold; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(x, y, 20, -Math.PI / 2, -Math.PI / 2 + 6.283 * clamp(a * 1.2)); ctx.stroke(); ctx.restore();
+  text(String(n), x, y + 1, { size: 22, weight: 700, color: C.gold, alpha: a, baseline: 'middle' });
+}
+function coin(x, y, r, face, a = 1) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a;
+  if (face === 'H') {
+    const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+    g.addColorStop(0, '#FFF0C8'); g.addColorStop(1, '#B8935A');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = 'rgba(90,60,20,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+    text('正', x, y + r * 0.06, { size: r * 1.05, family: F.serif, weight: 900, color: '#3a2a10', baseline: 'middle' });
+  } else {
+    ctx.fillStyle = '#0c0c0c'; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = C.gold; ctx.lineWidth = 3; ctx.stroke();
+    text('反', x, y + r * 0.06, { size: r * 1.05, family: F.serif, weight: 900, color: C.gold, baseline: 'middle' });
+  }
+  ctx.restore();
+}
+function ball(x, y, r, lit) {
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = '#161616'; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.fill();
+  if (lit > 0.01) {
+    ctx.save(); ctx.globalAlpha *= lit; ctx.shadowColor = 'rgba(232,207,148,0.7)'; ctx.shadowBlur = 50;
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r); g.addColorStop(0, '#FFF0C8'); g.addColorStop(1, '#B8935A');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.fill(); ctx.restore();
+  }
+  ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.clip();
+  ctx.strokeStyle = lit > 0.5 ? 'rgba(60,38,8,0.75)' : 'rgba(142,142,147,0.5)'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(0, -r); ctx.lineTo(0, r); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.stroke();
+  ctx.beginPath(); ctx.arc(-r * 1.15, 0, r * 0.95, -0.85, 0.85); ctx.stroke();
+  ctx.beginPath(); ctx.arc(r * 1.15, 0, r * 0.95, Math.PI - 0.85, Math.PI + 0.85); ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = lit > 0.5 ? C.goldHi : 'rgba(142,142,147,0.6)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- A: hook — three makes in a row ----------
+function sceneHook(t) {
+  const [a0, a1] = S.A_hook;
+  const a = window01(t, a0 - 0.05, a1, 0.2, 0.2);
+  if (a <= 0) return;
+  const lt = t - a0;
+  ctx.save(); ctx.globalAlpha = a;
+  text('Tim', 960, 300, { size: 60, weight: 700, color: C.goldHi });
+  for (let i = 0; i < 4; i++) {
+    const x = 960 + (i - 1.5) * 280, y = 520;
+    if (i < 3) {
+      const st = b(0.3 + 0.7 * i), k = clamp(easeBack(prog(lt, st, st + 0.35)));
+      const pop = 1 + (lt >= st ? 0.12 * Math.max(0, 1 - (lt - st) / 0.3) : 0);
+      ball(x, y, 82 * pop, k);
+      text('命中', x, y + 150, { size: 32, color: C.goldHi, alpha: k });
+    } else {
+      const pz = 0.5 + 0.5 * Math.sin(lt * 5), q = prog(lt, b(2.2), b(2.2) + 0.25);
+      ctx.save(); ctx.setLineDash([14, 12]); ctx.strokeStyle = `rgba(234,234,242,${0.35 + 0.4 * pz})`; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(x, y, 82, 0, 6.283); ctx.stroke(); ctx.restore();
+      text('?', x, y + 40, { size: 120, weight: 700, alpha: q });
+      text('下一球', x, y + 150, { size: 32, color: C.gray, alpha: q });
+    }
+  }
+  ctx.restore();
+}
+
+// ---------- B: everyone believes in it ----------
+const CROWD = (() => { const r = mulberry32(41), pts = []; for (let row = 0; row < 7; row++) for (let col = 0; col < 16; col++) pts.push({ x: 360 + col * 80 + (r() - .5) * 24 + (row % 2) * 40, y: 260 + row * 62 + (r() - .5) * 14, st: r() * 1.7, s: 8 + r() * 4 }); return pts; })();
+function sceneBelief(t) {
+  const [s0, s1] = S.B_belief;
+  const a = window01(t, s0 - 0.05, s1, 0.25, 0.25);
+  if (a <= 0) return;
+  const lt = t - s0;
+  ctx.save(); ctx.globalAlpha = a;
+  CROWD.forEach(d => {
+    const k = prog(lt, b(d.st), b(d.st) + 0.3);
+    if (k > 0.05) glowDot(d.x, d.y, d.s, `rgba(${240},${Math.round(lerp(150, 205, k))},${Math.round(lerp(130, 140, k))},${(0.5 + 0.45 * k).toFixed(2)})`, 3.2);
+    else { ctx.fillStyle = 'rgba(110,110,115,0.55)'; ctx.beginPath(); ctx.arc(d.x, d.y, d.s, 0, 6.283); ctx.fill(); }
+  });
+  const ta = prog(lt, b(1.1), b(1.1) + 0.3);
+  const bg = ctx.createRadialGradient(960, 540, 20, 960, 540, 330); bg.addColorStop(0, `rgba(0,0,0,${0.85 * ta})`); bg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = bg; ctx.fillRect(560, 200, 800, 680);
+  text('手感', 960, 600, { size: 230, family: F.serif, weight: 900, color: C.goldHi, alpha: ta });
+  ctx.restore();
+}
+
+// ---------- C / E: paper cards with a red stamp ----------
+function paperCard(t, [s0, s1], P) {
+  const a = window01(t, s0 - 0.1, s1, 0.3, 0.3);
+  if (a <= 0) return;
+  const lt = t - s0, hit = lt - b(P.stampBeat), slide = easeOut(prog(lt, 0, 0.5));
+  const shake = hit > 0 && hit < 0.5 ? 7 * Math.exp(-9 * hit) * Math.sin(70 * hit) : 0;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.translate(W / 2, 450 + (1 - slide) * 70 + shake); ctx.rotate(-0.025 + 0.012 * Math.sin(t * 0.9));
+  const sc = lerp(0.94, 1, slide); ctx.scale(sc, sc);
+  const pw = 1000, ph = 520;
+  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
+  roundRect(-pw / 2, -ph / 2, pw, ph, 6);
+  const pg = ctx.createLinearGradient(0, -ph / 2, 0, ph / 2); pg.addColorStop(0, '#F1E9D8'); pg.addColorStop(1, '#E2D7C0');
+  ctx.fillStyle = pg; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = 'rgba(90,70,40,0.35)'; ctx.lineWidth = 2; roundRect(-pw / 2 + 22, -ph / 2 + 22, pw - 44, ph - 44, 2); ctx.stroke();
+  text(P.header, 0, -ph / 2 + 92, { size: 22, color: '#6b5a40', spacing: 5 });
+  ctx.strokeStyle = 'rgba(90,70,40,0.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-300, -ph / 2 + 116); ctx.lineTo(300, -ph / 2 + 116); ctx.stroke();
+  P.lines.forEach((ln, i) => text(ln, 0, -48 + i * 88, { size: P.size, family: F.en, italic: true, color: '#2a2118' }));
+  text(P.author, 0, 112, { size: 36, family: F.en, italic: true, color: '#4a3b28' });
+  text(P.footer, -430, ph / 2 - 52, { size: 20, color: '#7a6a50', spacing: 2, align: 'left' });
+  const k = prog(lt, b(P.stampBeat), b(P.stampBeat) + 0.2);
+  if (k > 0) {
+    ctx.save(); ctx.translate(P.stampX, 168); ctx.rotate(-0.22);
+    const ss = lerp(2.6, 1, easeOut(k)); ctx.scale(ss, ss); ctx.globalAlpha *= Math.min(1, k * 4);
+    ctx.strokeStyle = C.red; ctx.lineWidth = 6; roundRect(-P.stampW / 2, -56, P.stampW, 112, 10); ctx.stroke();
+    ctx.lineWidth = 2; roundRect(-P.stampW / 2 + 9, -47, P.stampW - 18, 94, 6); ctx.stroke();
+    text(P.stamp, 0, 20, { size: 56, family: F.serif, weight: 900, color: C.red, spacing: 3 });
+    ctx.restore();
+    if (hit > 0 && hit < 0.45) { ctx.save(); ctx.strokeStyle = `rgba(181,58,47,${0.5 * (1 - hit / 0.45)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(P.stampX, 168, 90 + 260 * easeOut(hit / 0.45), 0, 6.283); ctx.stroke(); ctx.restore(); }
+  }
+  ctx.restore();
+  P.notes.forEach((n, i) => text(n, W / 2, 790 + i * 38, { size: 22, color: C.gray, alpha: a * 0.8, spacing: 2 }));
+}
+const PAPER_GVT = { header: 'COGNITIVE PSYCHOLOGY · 1985', lines: ['The Hot Hand in Basketball:', 'On the Misperception of Random Sequences'], size: 52, author: 'Gilovich · Vallone · Tversky', footer: 'Vol. 17, No. 3 · pp. 295–314', stamp: '手感是错觉', stampW: 340, stampX: 310, stampBeat: 3,
+  notes: ['图为示意 · 标题与出处取自原文献', '数据：76 人队比赛投篮 · 凯尔特人罚球 · 康奈尔球员投篮实验'] };
+const PAPER_MS = { header: 'ECONOMETRICA · NOVEMBER 2018', lines: ['Surprised by the Hot Hand Fallacy?', 'A Truth in the Law of Small Numbers'], size: 58, author: 'Joshua B. Miller · Adam Sanjurjo', footer: 'Vol. 86, No. 6 · pp. 2019–2047', stamp: '方法有偏差', stampW: 340, stampX: 310, stampBeat: 2.2,
+  notes: ['图为示意 · 标题与出处取自原文献'] };
+
+// ---------- D: how far it travelled ----------
+function stockIcon() {
+  roundRect(-130, -100, 260, 200, 18); ctx.strokeStyle = 'rgba(201,169,106,0.6)'; ctx.lineWidth = 4; ctx.stroke();
+  const pts = [[-100, 60], [-55, 15], [-25, 40], [25, -35], [65, -10], [105, -68]];
+  ctx.strokeStyle = C.goldHi; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.shadowColor = 'rgba(232,207,148,0.6)'; ctx.shadowBlur = 18;
+  ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+}
+function diceIcon() {
+  ctx.rotate(0.2); roundRect(-100, -100, 200, 200, 30); ctx.fillStyle = '#141414'; ctx.fill(); ctx.strokeStyle = 'rgba(201,169,106,0.7)'; ctx.lineWidth = 5; ctx.stroke();
+  ctx.fillStyle = C.goldHi; [[-50, -50], [50, -50], [0, 0], [-50, 50], [50, 50]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 16, 0, 6.283); ctx.fill(); });
+}
+function lotteryIcon() {
+  [[-70, 30, '7'], [70, 30, '13'], [0, -55, '28']].forEach(([x, y, n]) => {
+    const g = ctx.createRadialGradient(x - 15, y - 15, 5, x, y, 56); g.addColorStop(0, '#FFF0C8'); g.addColorStop(1, '#B8935A');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 56, 0, 6.283); ctx.fill();
+    text(n, x, y + 15, { size: 46, weight: 700, color: '#3a2a10' });
+  });
+}
+function sceneImpact(t) {
+  const [d0, d1] = S.D_impact;
+  const a = window01(t, d0 - 0.05, d1, 0.3, 0.3);
+  if (a <= 0) return;
+  const lt = t - d0;
+  [{ x: 560, label: '股市', draw: stockIcon }, { x: 960, label: '赌场', draw: diceIcon }, { x: 1360, label: '彩票', draw: lotteryIcon }].forEach((it, i) => {
+    const k = easeBack(prog(lt, b(0.2 + i), b(0.2 + i) + 0.45));
+    if (k <= 0) return;
+    ctx.save(); ctx.globalAlpha = a * Math.min(1, k * 1.5); ctx.translate(it.x, 430 + 4 * Math.sin(t * 1.3 + i)); ctx.scale(k, k);
+    ctx.save(); it.draw(); ctx.restore();
+    text(it.label, 0, 190, { size: 46, weight: 700 });
+    ctx.restore();
+  });
+}
+
+// ---------- F1: the rules ----------
+function sceneRules(t) {
+  const [r0, r1] = S.F1_rules;
+  const a = window01(t, r0 - 0.05, r1, 0.3, 0.25);
+  if (a <= 0) return;
+  const lt = t - r0, LX = 230;
+  ctx.save(); ctx.globalAlpha = a;
+  text('游戏规则', LX, 300, { size: 48, family: F.serif, weight: 900, color: C.gold, align: 'left' });
+  text('The rules', LX + 214, 300, { size: 30, family: F.en, italic: true, color: C.gray, align: 'left' });
+  [['抛 3 次公平硬币', 'Flip a fair coin 3 times'], ['只看每个「正面」之后的那一次', 'Only the flip right after each head'], ['算这些次里，正面占几成', 'What share of them are heads?']].forEach(([zh, en], i) => {
+    const k = prog(lt, b(0.3 + i), b(0.3 + i) + 0.3), y = 400 + i * 120;
+    numDot(LX + 20, y, i + 1, k);
+    text(zh, LX + 64, y + 10, { size: 34, align: 'left', alpha: k });
+    text(en, LX + 64, y + 48, { size: 24, family: F.en, italic: true, color: C.gray, align: 'left', alpha: k });
+  });
+  // example: 正 正 反 — the flips right after a 正 are the ones that get recorded
+  text('例子', 1400, 330, { size: 28, color: C.gray, alpha: prog(lt, b(0.4), b(0.4) + 0.3) });
+  ['H', 'H', 'T'].forEach((f, i) => {
+    const st = b(0.5 + 0.7 * i), k = easeBack(prog(lt, st, st + 0.35)), x = 1180 + i * 220;
+    coin(x, 480, 70 * clamp(k), f, clamp(k));
+    const rec = i >= 1 ? easeOut(prog(lt, b(2.2 + 0.5 * (i - 1)), b(2.2 + 0.5 * (i - 1)) + 0.3)) : 0;
+    if (rec > 0) { ctx.save(); ctx.globalAlpha *= rec; ctx.strokeStyle = C.goldHi; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x - 55, 580); ctx.lineTo(x + 55, 580); ctx.stroke(); ctx.restore(); text('记录', x, 630, { size: 28, color: C.goldHi, alpha: rec }); }
+  });
+  ctx.restore();
+}
+
+// ---------- F2: all eight outcomes ----------
+const SEQS = ['HHH', 'HHT', 'HTH', 'HTT', 'THH', 'THT', 'TTH', 'TTT'];
+const ROWS = SEQS.map(s => { const rec = []; for (let i = 0; i < 2; i++) if (s[i] === 'H') rec.push(i + 1); const heads = rec.filter(j => s[j] === 'H').length; return { s, rec, prop: rec.length ? heads / rec.length : null }; });
+const RUNNING = (() => { let sum = 0, n = 0; return ROWS.map(r => { if (r.prop !== null) { sum += r.prop; n++; } return n ? sum / n : null; }); })();
+function sceneTable(t) {
+  const [f0, f1] = S.F2_table;
+  const a = window01(t, f0 - 0.05, f1, 0.3, 0.3);
+  if (a <= 0) return;
+  const lt = t - f0;
+  ctx.save(); ctx.globalAlpha = a;
+  text('8 种结果', 480, 232, { size: 30, color: C.gray, align: 'left' });
+  text('正面占比', 900, 232, { size: 30, color: C.gray, align: 'left' });
+  ctx.strokeStyle = 'rgba(201,169,106,0.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(460, 252); ctx.lineTo(1130, 252); ctx.stroke();
+  ROWS.forEach((r, i) => {
+    const k = easeOut(prog(lt, b(i), b(i) + 0.3)); if (k <= 0) return;
+    const y = 306 + i * 62, dead = r.prop === null, fade = dead ? 1 - 0.55 * prog(lt, b(6) + 0.3, b(6) + 0.7) : 1;
+    ctx.save(); ctx.globalAlpha *= k * fade; ctx.translate((1 - k) * -40, 0);
+    r.s.split('').forEach((f, j) => {
+      const x = 520 + j * 70; coin(x, y, 23, f);
+      if (r.rec.includes(j)) { ctx.strokeStyle = C.goldHi; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x - 20, y + 33); ctx.lineTo(x + 20, y + 33); ctx.stroke(); }
+    });
+    text(dead ? '—' : Math.round(r.prop * 100) + '%', 900, y + 14, { size: 44, weight: 700, color: dead ? C.gray : C.text, align: 'left' });
+    if (dead) text('作废', 1010, y + 12, { size: 28, color: C.gray, align: 'left' });
+    ctx.restore();
+  });
+  // running average
+  const j = Math.min(7, Math.floor(lt / BEAT)), ra = prog(lt, 0.2, 0.5);
+  text('目前平均', 1500, 400, { size: 30, color: C.gray, alpha: ra });
+  text((RUNNING[j] * 100).toFixed(1) + '%', 1500, 520, { size: 110, weight: 700, color: C.goldHi, alpha: ra });
+  ctx.restore();
+}
+
+// ---------- F3: the average ----------
+function sceneAvg(t) {
+  const [v0, v1] = S.F3_avg;
+  const a = window01(t, v0 - 0.05, v1, 0.3, 0.3);
+  if (a <= 0) return;
+  const lt = t - v0;
+  ctx.save(); ctx.globalAlpha = a;
+  text('(100% + 50% + 0 + 0 + 100% + 0) ÷ 6', 960, 300, { size: 48, alpha: prog(lt, 0.05, 0.4) });
+  text('= 5/12', 960, 400, { size: 80, weight: 700, color: C.gray, alpha: prog(lt, b(0.8), b(0.8) + 0.3) });
+  const k = easeOut(prog(lt, b(1.4), b(1.4) + 1.1)), val = lerp(50, 41.7, k), ca = prog(lt, b(1.4), b(1.4) + 0.25);
+  text(val.toFixed(1) + '%', 960, 600, { size: 210, weight: 700, color: C.goldHi, alpha: ca });
+  // bar with the 50% mark
+  const bx = 360, bw = 1200, by = 690;
+  ctx.globalAlpha = a * ca; roundRect(bx, by, bw, 26, 13); ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.fill();
+  roundRect(bx, by, bw * val / 100, 26, 13); ctx.fillStyle = 'rgba(232,207,148,0.9)'; ctx.fill();
+  ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(234,234,242,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx + bw / 2, by - 18); ctx.lineTo(bx + bw / 2, by + 44); ctx.stroke(); ctx.setLineDash([]);
+  text('公平应有：50%', bx + bw / 2, by + 84, { size: 28, color: C.gray });
+  ctx.restore();
+}
+
+// ---------- G: Tim, a perfectly random shooter ----------
+const SIM = (() => { const r = mulberry32(2018); return Array.from({ length: 30 }, () => { const row = Array.from({ length: 100 }, () => r() < 0.5); const mark = row.map((_, j) => j < 3 ? 0 : (row[j - 1] && row[j - 2] && row[j - 3] ? 1 : (!row[j - 1] && !row[j - 2] && !row[j - 3] ? 2 : 0))); return { row, mark }; }); })();
+function sceneSim(t) {
+  const [g0, g1] = S.G_sim;
+  const a = window01(t, g0 - 0.05, g1, 0.3, 0.3);
+  if (a <= 0) return;
+  const lt = t - g0, X0 = 150, Y0 = 240, CW_ = 9, RH = 11;
+  ctx.save(); ctx.globalAlpha = a;
+  SIM.forEach((r, ri) => {
+    const st = 0.05 + ri * 0.075, k = prog(lt, st, st + 0.25), n = Math.floor(100 * k);
+    for (let j = 0; j < n; j++) { ctx.fillStyle = r.row[j] ? 'rgba(232,207,148,0.85)' : 'rgba(66,66,72,0.95)'; ctx.fillRect(X0 + j * CW_, Y0 + ri * RH, 8, 10); }
+  });
+  const mk = prog(lt, b(2.4), b(2.4) + 0.5);
+  if (mk > 0) { ctx.lineWidth = 1.4; SIM.forEach((r, ri) => r.mark.forEach((m, j) => { if (!m) return; ctx.strokeStyle = m === 1 ? `rgba(255,255,255,${mk})` : `rgba(143,176,255,${mk})`; ctx.strokeRect(X0 + j * CW_ - 0.5, Y0 + ri * RH - 0.5, 9, 11); })); }
+  const la = prog(lt, 0.3, 0.6);
+  ctx.fillStyle = 'rgba(232,207,148,0.85)'; ctx.globalAlpha = a * la; ctx.fillRect(X0, 612, 14, 14); ctx.fillStyle = 'rgba(66,66,72,0.95)'; ctx.fillRect(X0 + 150, 612, 14, 14);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(X0 + 300, 611, 16, 16); ctx.strokeStyle = BLUE; ctx.strokeRect(X0 + 560, 611, 16, 16);
+  ctx.globalAlpha = a;
+  text('投进', X0 + 24, 626, { size: 24, color: C.gray, align: 'left', alpha: la }); text('没进', X0 + 174, 626, { size: 24, color: C.gray, align: 'left', alpha: la });
+  text('连中 3 球之后的一球', X0 + 326, 626, { size: 24, color: C.gray, align: 'left', alpha: la }); text('连丢 3 球之后的一球', X0 + 586, 626, { size: 24, color: C.gray, align: 'left', alpha: la });
+  // results
+  const p1 = prog(lt, b(3), b(3) + 0.3), p2 = prog(lt, b(3.8), b(3.8) + 0.3);
+  text('Tim · 命中率恒为 50%', 1470, 290, { size: 28, color: C.gray, alpha: prog(lt, 0.3, 0.6) });
+  text('连中 3 球之后', 1470, 370, { size: 32, alpha: p1 }); text((46.1 * easeOut(p1)).toFixed(1) + '%', 1470, 480, { size: 110, weight: 700, color: '#fff', alpha: p1 });
+  text('连丢 3 球之后', 1470, 570, { size: 32, alpha: p2 }); text((53.9 * easeOut(p2)).toFixed(1) + '%', 1470, 680, { size: 110, weight: 700, color: BLUE, alpha: p2 });
+  text('（本片模拟 20 万次，每次 100 球）', W / 2, 800, { size: 24, color: C.gray, alpha: prog(lt, 0.5, 0.9) * 0.8, spacing: 1 });
+  ctx.restore();
+}
+
+// ---------- H: remove the bias ----------
+function sceneCorrect(t) {
+  const [h0, h1] = S.H_correct;
+  const a = window01(t, h0 - 0.05, h1, 0.3, 0.3);
+  if (a <= 0) return;
+  const lt = t - h0, X0 = 360, PX = 80, BY = 380;
+  ctx.save(); ctx.globalAlpha = a;
+  // axis
+  ctx.strokeStyle = 'rgba(234,234,242,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X0, 600); ctx.lineTo(X0 + 15 * PX + 40, 600); ctx.stroke();
+  [0, 5, 10, 15].forEach(v => { ctx.beginPath(); ctx.moveTo(X0 + v * PX, 600); ctx.lineTo(X0 + v * PX, 614); ctx.stroke(); text(String(v), X0 + v * PX, 650, { size: 28, color: C.gray }); });
+  text('个百分点', X0 + 15 * PX + 150, 650, { size: 26, color: C.gray });
+  text('连中 3 球之后 − 连丢 3 球之后，命中率的差', 960, 710, { size: 28, color: C.gray, alpha: prog(lt, 0.2, 0.5) });
+  // bar: +3 first, then pushed to +13
+  const s1 = prog(lt, 0.2, b(1.2)), s2 = easeIO(prog(lt, b(3), b(3) + 1.5));
+  const val = lerp(3 * easeOut(s1), 13, s2), warm = s2;
+  ctx.save(); ctx.shadowColor = `rgba(232,207,148,${0.6 * warm})`; ctx.shadowBlur = 30 * warm;
+  roundRect(X0, BY, Math.max(4, val * PX), 90, 10);
+  ctx.fillStyle = `rgb(${Math.round(lerp(234, 232, warm))},${Math.round(lerp(234, 207, warm))},${Math.round(lerp(242, 148, warm))})`; ctx.fill(); ctx.restore();
+  text('+' + Math.round(val), X0 + val * PX + 28, BY + 72, { size: 84, weight: 700, color: warm > 0.5 ? C.goldHi : C.text, align: 'left', alpha: prog(lt, 0.3, 0.6) });
+  text('1985 年原始分析', X0, BY - 30, { size: 34, color: C.gray, align: 'left', alpha: 1 - prog(lt, b(3), b(3) + 0.3) });
+  text('扣除偏差之后', X0, BY - 30, { size: 34, color: C.goldHi, align: 'left', alpha: prog(lt, b(3) + 0.2, b(3) + 0.6) });
+  const pa = prog(lt, b(5), b(5) + 0.3);
+  text('p < 0.01', X0 + 13 * PX - 60, BY + 160, { size: 40, weight: 700, color: C.goldHi, alpha: pa });
+  text('康奈尔球员投篮实验 · 26 人 × 100 球', W / 2, 800, { size: 24, color: C.gray, alpha: prog(lt, 0.5, 0.9) * 0.8, spacing: 1 });
+  ctx.restore();
+}
+
+// ---------- I: how big is 13 points? ----------
+function sceneBench(t) {
+  const [i0, i1] = S.I_benchmark;
+  const a = window01(t, i0 - 0.05, i1, 0.3, 0.3);
+  if (a <= 0) return;
+  const lt = t - i0, X0 = 360, PX = 80;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.strokeStyle = 'rgba(234,234,242,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X0, 640); ctx.lineTo(X0 + 15 * PX + 40, 640); ctx.stroke();
+  [0, 5, 10, 15].forEach(v => { ctx.beginPath(); ctx.moveTo(X0 + v * PX, 640); ctx.lineTo(X0 + v * PX, 654); ctx.stroke(); text(String(v), X0 + v * PX, 690, { size: 28, color: C.gray }); });
+  text('个百分点', X0 + 15 * PX + 150, 690, { size: 26, color: C.gray });
+  [{ v: 13, y: 350, col: C.goldHi, lab: '手感：13', st: 0.2 }, { v: 12, y: 510, col: '#EAEAF2', lab: 'NBA 2015–16：中位三分射手 → 顶级三分射手：12', st: b(1.3) }].forEach(r => {
+    const k = easeOut(prog(lt, r.st, r.st + 0.7)), x1 = X0 + r.v * PX * k;
+    ctx.strokeStyle = r.col; ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(X0, r.y); ctx.lineTo(x1, r.y); ctx.stroke();
+    ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(X0, r.y - 16); ctx.lineTo(X0, r.y + 16); ctx.moveTo(x1, r.y - 16); ctx.lineTo(x1, r.y + 16); ctx.stroke();
+    text(r.lab, X0, r.y - 36, { size: r.v === 13 ? 54 : 34, weight: r.v === 13 ? 700 : 400, color: r.col, align: 'left', alpha: prog(lt, r.st, r.st + 0.3) });
+  });
+  ctx.restore();
+}
+
+// ---------- J: the honest caveats ----------
+function sceneCaveat(t) {
+  const [j0, j1] = S.J_caveat;
+  const a = window01(t, j0 - 0.05, j1, 0.25, 0.3);
+  if (a <= 0) return;
+  const lt = t - j0;
+  [{ x: 480, big: '比赛里有防守', small: '对手会针对手热者设防', rot: -0.03, st: 0.2 }, { x: 960, big: '只有 26 人', small: '一组实验，每人 100 球', rot: 0.02, st: 1.2 }, { x: 1440, big: '后续研究不一致', small: '有的找到，有的没有', rot: -0.015, st: 2.2 }].forEach(n => {
+    const k = prog(lt, b(n.st), b(n.st) + 0.4); if (k <= 0) return;
+    const drop = (1 - easeOut(k)) * 280, bounce = k >= 1 ? 6 * Math.exp(-8 * (lt - b(n.st) - 0.4)) * Math.sin(40 * (lt - b(n.st) - 0.4)) : 0;
+    ctx.save(); ctx.globalAlpha = a * Math.min(1, k * 3); ctx.translate(n.x, 450 - drop + bounce); ctx.rotate(n.rot);
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+    roundRect(-200, -120, 400, 240, 8); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    text(n.big, 0, -8, { size: 46, weight: 700, color: '#2a2118' });
+    text(n.small, 0, 56, { size: 26, color: '#6b5a40' });
+    ctx.restore();
+  });
+}
+
+// ---------- K: landing ----------
+function sceneLanding(t) {
+  const [k0, k1] = S.K_landing;
+  const a = window01(t, k0 - 0.05, k1, 0.4, 0.4);
+  if (a <= 0) return;
+  const lt = t - k0;
+  dust(t, a * 0.8);
+  for (let i = 0; i < 4; i++) {
+    const x = 960 + (i - 1.5) * 220, y = 480;
+    if (i < 3) { const k = clamp(easeBack(prog(lt, b(0.2 + 0.7 * i), b(0.2 + 0.7 * i) + 0.35))); glowDot(x, y, 34 * Math.max(0.01, k), 'rgba(245,214,150,0.98)', 4.5, a * k); }
+    else { const q = prog(lt, b(2.4), b(2.4) + 0.4), pz = 0.5 + 0.5 * Math.sin(lt * 3); glowDot(x, y, 34 * Math.max(0.01, q), 'rgba(245,214,150,0.55)', 3.5, a * q * (0.55 + 0.45 * pz)); }
+  }
+}
+
+// ---------- L: closing question ----------
+function sceneEnd(t) {
+  const [l0, l1] = S.L_end;
+  const a2 = window01(t, l0 - 0.15, l1, 0.3, 0.2);
+  if (a2 <= 0) return;
+  const lt = t - l0 + 0.15, sg = easeBack(prog(lt, 0, 0.4));
+  dust(t, a2);
+  glowDot(960, 330, 16 * sg, 'rgba(245,214,150,0.98)', 6, a2);
+  text('你最近一次「手感来了」，', 960, 500, { size: 78, weight: 700, alpha: a2 * prog(lt, 0.1, 0.45) });
+  text('是什么时候？', 960, 610, { size: 84, weight: 700, color: C.goldHi, alpha: a2 * prog(lt, 0.3, 0.65) });
+  text('When did you last feel “hot”?', 960, 684, { size: 36, family: F.en, italic: true, color: C.gray, alpha: a2 * prog(lt, 0.55, 0.9) });
+}
+
+// ---------- compose ----------
+function render(t, frame = Math.round(t * TL.fps)) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  background(t, frame);
+  const lab = (k, str, k2) => topLabel(t, S[k][0] - 0.1, S[k2 || k][1], str);
+  lab('A_hook', '连 中 3 球 之 后'); lab('B_belief', '几 乎 人 人 都 信'); lab('C_1985', '1985 · 认 知 心 理 学'); lab('D_impact', '被 当 成 经 典');
+  lab('E_twist', '2018 · 计 量 经 济 学'); lab('F1_rules', '抛 硬 币 实 验', 'F3_avg'); lab('G_sim', '纯 随 机 射 手 · 模 拟'); lab('H_correct', '校 正 之 后');
+  lab('I_benchmark', '这 有 多 大 ？'); lab('J_caveat', '但 是');
+  dust(t, 0.45);
+  sceneTitle(t);
+  sceneHook(t); sceneBelief(t);
+  paperCard(t, S.C_1985, PAPER_GVT);
+  sceneImpact(t);
+  paperCard(t, S.E_twist, PAPER_MS);
+  sceneRules(t); sceneTable(t); sceneAvg(t);
+  sceneSim(t); sceneCorrect(t); sceneBench(t); sceneCaveat(t); sceneLanding(t); sceneEnd(t);
+  const sub = (k, o, n, zh, en) => subtitle(t, S[k][0] + (o ? b(o) : 0.05), S[k][0] + b(o + n), zh, en);
+  sub('A_hook', 0, 3, '连中 3 球后，下一球更容易进吗？', 'After three makes in a row, is the next shot more likely to go in?');
+  sub('B_belief', 0, 3, '几乎所有球迷和教练，都相信有「手感」', 'Nearly every fan and coach believes in the hot hand.');
+  sub('C_1985', 0, 3, '1985 年，三位心理学家分析了投篮数据', 'In 1985, three psychologists analysed shooting data.');
+  sub('C_1985', 3, 3, '结论：「手感」只是错觉', 'Their verdict: the hot hand is a fallacy.');
+  sub('D_impact', 0, 4, '这个结论成了经典，被用来解释股市、赌博和彩票', 'It became canonical — used to explain markets, gambling and lotteries.');
+  sub('E_twist', 0, 2, '这个结论，科学家错了 30 年', 'Scientists got this wrong for 30 years —');
+  sub('E_twist', 2, 2, '直到 2018 年，统计方法的偏差才被发现', "until 2018, when the method's bias was found.");
+  sub('F1_rules', 0, 4, '抛 3 次公平硬币，只看每个「正面」后的那一次', 'Flip a fair coin 3 times. Look only at the flip right after each head.');
+  sub('F2_table', 0, 4, '8 种结果，出现的机会一样大', 'Eight outcomes, all equally likely.');
+  sub('F2_table', 4, 4, '后两行没有可记的，作废', 'The last two rows have nothing to record — discard.');
+  sub('F3_avg', 0, 4, '「正面」之后还是正面，平均只有 41.7%', 'Heads after heads: only 41.7% on average.');
+  sub('G_sim', 0, 3, 'Tim 是个命中率恒为 50% 的纯随机射手', 'Tim is a pure random shooter: a constant 50% hit rate.');
+  sub('G_sim', 3, 3, '连中 3 球后 46.1%，连丢 3 球后反而 53.9%', 'After 3 makes: 46.1%. After 3 misses: 53.9%.');
+  sub('H_correct', 0, 3, '把这个偏差扣掉，再看 1985 年的投篮实验——', 'Remove the bias and revisit the 1985 shooting experiment —');
+  sub('H_correct', 3, 3, '连中 3 球后比连丢 3 球后，命中率高 13 个百分点', 'After 3 makes vs 3 misses: a 13-point higher hit rate.');
+  sub('I_benchmark', 0, 4, '相当于 NBA 普通三分射手和顶级射手的差距', 'About the gap between a median and a top NBA three-point shooter.');
+  sub('J_caveat', 0, 3, '但争议没有结束：样本只有 26 名球员', "But it isn't settled: just 26 players.");
+  sub('J_caveat', 3, 2, '后续研究，有的找到手感，有的没有', 'Later studies disagree.');
+  sub('K_landing', 0, 3, '手感，不是魔法', "The hot hand isn't magic —");
+  sub('K_landing', 3, 2, '但也未必是错觉', 'but it may not be an illusion either.');
+  finish(t, frame);
+}
+
+// all strings drawn, so every font subset is loaded before frame 0
+window.ALL_TEXT = document.documentElement.innerHTML;
+window.ready = (async () => {
+  const sample = window.ALL_TEXT;
+  await Promise.all([
+    document.fonts.load(`900 92px ${F.serif}`, sample),
+    document.fonts.load(`400 40px ${F.sans}`, sample),
+    document.fonts.load(`700 40px ${F.sans}`, sample),
+    document.fonts.load(`italic 400 30px ${F.en}`, sample),
+  ]);
+  await document.fonts.ready;
+  return { duration: DURATION, frames: Math.ceil(DURATION * TL.fps) };
+})();
+window.render = render;
+</script>
+</body>
+</html>
