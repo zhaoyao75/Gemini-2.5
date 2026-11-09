@@ -1,0 +1,258 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}
+@font-face{font-family:WK;src:url('../fonts/LXGWWenKai-Regular.ttf')}</style></head>
+<body><canvas id="c"></canvas>
+<script src="meta.js"></script>
+<script>
+// Season 2: ?style=warhol | kusama | chagall | seurat | magritte
+const meta = window.META;
+const STYLE = new URLSearchParams(location.search).get('style') || 'warhol';
+const load = src => new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = src; });
+const px = im => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); return x.getImageData(0, 0, im.width, im.height).data; };
+let seed = 31337; const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+const R = (a, b) => a + (b - a) * rand(), clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t), shade = (c, f) => c.map(v => clamp(v * f, 0, 255));
+const css = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const hash = (a, b, c = 0) => { const x = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453; return x - Math.floor(x); };
+const WALL = 0, TABLE = 1, VASE_W = 2, VASE_B = 3, STEM = 4, LEAF = 5, PETAL = 6, STAMEN = 7, BUD = 8, SEPAL = 9;
+const noise = (x, y) => Math.sin(x * 0.011 + Math.sin(y * 0.007) * 3) * Math.cos(y * 0.013 + Math.sin(x * 0.005) * 2);
+const isObj = k => k >= VASE_W;
+
+(async () => {
+  const [imC, imL] = await Promise.all(['cls.png', 'line.png'].map(load));
+  const C = px(imC), Ln = px(imL), W = meta.W, H = meta.H, TY = meta.table_y;
+  const cv = document.getElementById('c'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
+  const info = (x, y) => { x = clamp(x | 0, 0, W - 1); y = clamp(y | 0, 0, H - 1); const o = (y * W + x) * 4; return { k: C[o], bl: C[o + 1], puff: C[o + 2] / 255, role: (meta.blooms[C[o + 1] - 1] || [0, 0, 0, 0, 'a'])[4] }; };
+  const inkAt = (x, y) => { x = clamp(x | 0, 0, W - 1); y = clamp(y | 0, 0, H - 1); const o = (y * W + x) * 4; return Ln[o] === 255 ? 0 : 1 - Ln[o + 1] / 255; };
+  const fill = fn => { const img = ctx.createImageData(W, H), d = img.data;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = fn(x, y), o = (y * W + x) * 4; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; }
+    ctx.putImageData(img, 0, 0); };
+  const inkOver = (colFn, gain = 1.2, thick = 0) => { const img = ctx.getImageData(0, 0, W, H), d = img.data;
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      let v = inkAt(x, y); if (thick) v = Math.max(v, 0.85 * Math.max(inkAt(x - 1, y), inkAt(x + 1, y), inkAt(x, y - 1), inkAt(x, y + 1)));
+      if (v < 0.1) continue; const lc = colFn(info(x, y), x, y); if (!lc) continue; const o = (y * W + x) * 4, a = clamp(v * gain);
+      d[o] = d[o] * (1 - a) + lc[0] * a; d[o + 1] = d[o + 1] * (1 - a) + lc[1] * a; d[o + 2] = d[o + 2] * (1 - a) + lc[2] * a; }
+    ctx.putImageData(img, 0, 0); };
+  const grain = (a = 0.03) => { ctx.globalAlpha = a; for (let y = 0; y < H; y += 3) { ctx.fillStyle = rand() < 0.5 ? '#000' : '#fff'; ctx.fillRect(0, y, W, 1); } ctx.globalAlpha = 1; };
+
+  // ================= ANDY WARHOL: 4-up silkscreen, flat neon, mis-registered black =================
+  if (STYLE === 'warhol') {
+    const Q = [ // bg, table, petal a, b, c, leaf, vase, cobalt
+      ['#ff4fa3', '#ffd400', '#ffe600', '#ff7a00', '#ffffff', '#00a86b', '#7fd3ff', '#1a1aff'],
+      ['#00c2ff', '#ff2d55', '#ff2d55', '#ff9ec8', '#fff6a0', '#2bd46a', '#ffffff', '#ff2d55'],
+      ['#ffe600', '#7a2cff', '#ff3d7f', '#7a2cff', '#ffffff', '#ff7a00', '#ffffff', '#00b3ff'],
+      ['#2ee59d', '#ff5a1f', '#ff7a00', '#ff2d55', '#ffe600', '#1a6bff', '#ffffff', '#7a2cff'],
+    ].map(q => q.map(hex));
+    const hw = W / 2, hh = H / 2;
+    fill((x, y) => {
+      const qi = (x >= hw ? 1 : 0) + (y >= hh ? 2 : 0), q = Q[qi];
+      const sx = (x % hw) * 2, sy = (y % hh) * 2, p = info(sx, sy);
+      let c;
+      switch (p.k) {
+        case WALL: c = q[0]; break; case TABLE: c = q[1]; break;
+        case PETAL: c = p.role === 'a' ? q[2] : p.role === 'b' ? q[3] : q[4]; break;
+        case STAMEN: c = q[1]; break; case BUD: c = q[3]; break;
+        case LEAF: case STEM: case SEPAL: c = q[5]; break;
+        case VASE_W: c = q[6]; break; case VASE_B: c = q[7]; break;
+      }
+      // mis-registered black screen: line art + shadow areas, offset per panel
+      const ox = [6, -5, 4, -6][qi], oy = [4, 5, -5, -3][qi];
+      const ink = inkAt(sx + ox, sy + oy), sh = info(sx + ox, sy + oy);
+      if (ink > 0.35 || (isObj(sh.k) && sh.k !== VASE_W && sh.puff < 0.12)) c = hex('#111111');
+      // halftone dots on the background
+      if (p.k === WALL && ((x >> 3) + (y >> 3)) % 2 === 0 && Math.hypot((x & 7) - 3.5, (y & 7) - 3.5) < 1.6) c = shade(c, 0.82);
+      return c;
+    });
+    ctx.fillStyle = '#111'; ctx.fillRect(hw - 3, 0, 6, H); ctx.fillRect(0, hh - 3, W, 6);
+    grain(0.04);
+  }
+
+  // ================= YAYOI KUSAMA: polka dots everywhere =================
+  if (STYLE === 'kusama') {
+    const dot = (x, y, s, jit = 0.25) => { const r = Math.floor(y / s), off = r % 2 ? s / 2 : 0, c = Math.floor((x + off) / s);
+      const cx = (c + 0.5) * s - off + (hash(c, r) - 0.5) * s * jit, cy = (r + 0.5) * s + (hash(c, r, 1) - 0.5) * s * jit;
+      return Math.hypot(x - cx, y - cy) / s; };
+    fill((x, y) => {
+      const p = info(x, y);
+      switch (p.k) {
+        case WALL: return dot(x, y, 64) < 0.3 + 0.04 * Math.sin(x * 0.01) ? hex('#ffffff') : hex('#e2001a');
+        case TABLE: return dot(x, y, 40) < 0.3 ? hex('#e2001a') : hex('#ffffff');
+        case PETAL: { const s = 16 + 14 * p.puff;   // pumpkin dots: bigger in the middle of each petal
+          const base = p.role === 'b' ? hex('#ff2a6a') : p.role === 'c' ? hex('#ffffff') : hex('#ffd400');
+          return dot(x, y, 22, 0.1) < 0.12 + 0.2 * p.puff ? hex('#111111') : base; }
+        case STAMEN: return dot(x, y, 12) < 0.32 ? hex('#111111') : hex('#ff7a00');
+        case BUD: return dot(x, y, 14) < 0.3 ? hex('#ffffff') : hex('#ff2a6a');
+        case LEAF: case SEPAL: return dot(x, y, 18) < 0.28 ? hex('#111111') : hex('#00a651');
+        case STEM: return hex('#00a651');
+        case VASE_W: return dot(x, y, 30) < 0.32 ? hex('#e2001a') : hex('#ffffff');
+        case VASE_B: return hex('#111111');
+      }
+      return [0, 0, 0];
+    });
+    inkOver(() => hex('#111111'), 1.4, 2);
+  }
+
+  // ================= YAYOI KUSAMA, pumpkin palette: yellow & black only =================
+  if (STYLE === 'kusama_pumpkin') {
+    const Y = hex('#f7cd00'), K = hex('#141210');
+    const dot = (x, y, s, jit = 0.15) => { const r = Math.floor(y / s), off = r % 2 ? s / 2 : 0, c = Math.floor((x + off) / s);
+      const cx = (c + 0.5) * s - off + (hash(c, r) - 0.5) * s * jit, cy = (r + 0.5) * s + (hash(c, r, 1) - 0.5) * s * jit;
+      return Math.hypot(x - cx, y - cy) / s; };
+    fill((x, y) => {
+      const p = info(x, y);
+      switch (p.k) {
+        case WALL: return dot(x, y, 34, 0.3) < 0.17 + 0.03 * Math.sin(x * 0.02 + y * 0.013) ? Y : K;   // black ground, a net of yellow dots
+        case TABLE: return dot(x, y, 26) < 0.26 ? K : Y;                                  // yellow ledge, black dots
+        case PETAL: case BUD: return dot(x, y, 19, 0.05) < 0.05 + 0.33 * Math.pow(p.puff, 0.8) ? K : Y;   // pumpkin dots: big in the swell, tiny at the edges
+        case STAMEN: return dot(x, y, 10) < 0.34 ? Y : K;
+        case LEAF: case SEPAL: return dot(x, y, 13, 0.05) < 0.2 + 0.24 * p.puff ? K : Y;  // yellow leaves, dense black dots (reads darker than the petals)
+        case STEM: return Y;
+        case VASE_W: return dot(x, y, 22, 0.05) < 0.06 + 0.3 * p.puff ? K : Y;
+        case VASE_B: return K;
+      }
+      return K;
+    });
+    inkOver(() => K, 1.6, 2);
+  }
+
+  // ================= MARC CHAGALL: dream-blue night, glowing flowers, floating lovers =================
+  if (STYLE === 'chagall') {
+    const P = { bloom: { a: ['#c8306a', '#ff7aa8', '#ffd0e0'], b: ['#9a1030', '#e8303a', '#ffa080'], c: ['#b8c8ff', '#f4f0ff', '#ffffff'] },
+      leaf: ['#1a6a5a', '#2ea870', '#a8e070'] };
+    // stained-glass-like patches of blue / violet / green in the night
+    fill((x, y) => {
+      const p = info(x, y), t = p.puff;
+      if (p.k === WALL || p.k === TABLE) {
+        const n = noise(x * 0.35, y * 0.35) + 0.5 * noise(x * 0.9 + 50, y * 0.9);
+        let c = mix(hex('#0e1c6a'), hex('#2a4ab8'), clamp(0.5 + n * 0.45));
+        if (n > 0.55) c = mix(c, hex('#5a2aa8'), 0.5);
+        if (n < -0.65) c = mix(c, hex('#1a7a8a'), 0.45);
+        const gl = meta.blooms.reduce((m, [cx, cy, rx]) => Math.max(m, Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (rx * rx * 2.2))), 0);
+        c = mix(c, hex('#8a9aff'), gl * 0.45);                                     // the flowers glow in the dark
+        if (p.k === TABLE) c = mix(c, hex('#2a1a5a'), 0.5);
+        return c;
+      }
+      switch (p.k) {
+        case PETAL: { const B = P.bloom[p.role]; return t < 0.5 ? mix(hex(B[0]), hex(B[1]), t * 2) : mix(hex(B[1]), hex(B[2]), (t - 0.5) * 2); }
+        case LEAF: case SEPAL: case STEM: return mix(hex(P.leaf[0]), hex(P.leaf[2]), t * 0.8);
+        case STAMEN: return hex('#ffd84a'); case BUD: return mix(hex('#9a1040'), hex('#ff6a9a'), t);
+        case VASE_W: return mix(hex('#c8d0f0'), hex('#ffffff'), t); case VASE_B: return hex('#1a2a9a');
+      }
+      return [0, 0, 0];
+    });
+    const veil = (n, alpha) => {   // loose translucent strokes that melt figures into the night
+      ctx.lineCap = 'round';
+      for (let i = 0; i < n; i++) { const x = R(0, W), y = R(0, H), p = info(x, y);
+        const col = p.k <= TABLE ? mix(hex('#3a5ad8'), hex('#8a4ad8'), rand()) : p.k === PETAL ? hex(P.bloom[p.role][1]) : hex('#4ac890');
+        ctx.strokeStyle = css(col, alpha); ctx.lineWidth = R(4, 14); const a = R(0, 6.28), l = R(10, 40);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); ctx.stroke(); } };
+    veil(9000, 0.12);
+    // moon with a soft halo
+    const g = ctx.createRadialGradient(935, 150, 40, 935, 150, 190); g.addColorStop(0, 'rgba(255,240,170,0.35)'); g.addColorStop(1, 'rgba(255,240,170,0)');
+    ctx.fillStyle = g; ctx.fillRect(740, 0, 346, 360);
+    ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(935, 150, 78, 0, 7); ctx.fill();
+    ctx.fillStyle = css(hex('#1a2a7a')); ctx.beginPath(); ctx.arc(968, 128, 68, 0, 7); ctx.fill();
+    // Vitebsk: tilted, toppling houses (one upside down), lit windows
+    const house = (x, y, w, h, rot, col, roof) => { ctx.save(); ctx.translate(x + w / 2, y); ctx.rotate(rot);
+      ctx.fillStyle = col; ctx.fillRect(-w / 2, -h, w, h);
+      ctx.fillStyle = roof; ctx.beginPath(); ctx.moveTo(-w / 2 - 8, -h); ctx.lineTo(0, -h - 46); ctx.lineTo(w / 2 + 8, -h); ctx.fill();
+      ctx.fillStyle = '#ffd84a'; ctx.fillRect(-w * 0.2, -h * 0.65, 14, 18); ctx.fillRect(w * 0.12, -h * 0.65, 14, 18);
+      ctx.fillStyle = '#1a1a4a'; ctx.fillRect(-8, -h * 0.32, 16, h * 0.32); ctx.restore(); };
+    [[20, 0.12], [150, -0.18], [260, 0.08], [770, -0.1], [880, 0.2], [990, -0.06]].forEach(([x, r], i) =>
+      house(x, H - 34, 84, 70 + (i % 3) * 16, r, ['#2a3a9a', '#5a2a8a', '#1a6a7a'][i % 3], ['#c8304a', '#1a2a6a', '#3aa86a'][i % 3]));
+    house(940, 330, 70, 60, Math.PI + 0.25, '#3a2a8a', '#c8304a');          // a house floating upside down in the sky
+    // the flying lovers: drawn naively on an offscreen sheet, then laid in as soft brush dabs
+    const L = document.createElement('canvas'); L.width = 520; L.height = 360; const lc = L.getContext('2d');
+    lc.translate(260, 180); lc.rotate(-0.22);
+    // bride: long horizontal body in a red dress, floating
+    lc.fillStyle = '#e0263e';
+    lc.beginPath(); lc.moveTo(-150, -10); lc.bezierCurveTo(-60, -60, 90, -54, 210, -24); lc.bezierCurveTo(130, 2, 10, 20, -140, 18); lc.closePath(); lc.fill();
+    lc.fillStyle = '#ffffff'; lc.beginPath(); lc.moveTo(-170, -18); lc.bezierCurveTo(-120, -70, -40, -80, 40, -64); lc.bezierCurveTo(-40, -50, -110, -30, -150, -6); lc.fill();   // trailing veil
+    lc.fillStyle = '#f2d2bc'; lc.beginPath(); lc.ellipse(-168, 0, 30, 26, -0.2, 0, 7); lc.fill();          // her face
+    lc.fillStyle = '#2a1a22'; lc.beginPath(); lc.ellipse(-182, -12, 24, 18, -0.3, 0, 7); lc.fill();        // hair
+    // groom: green body below, arm around her, face turned up to hers
+    lc.fillStyle = '#1f8a5c';
+    lc.beginPath(); lc.moveTo(-130, 30); lc.bezierCurveTo(-40, 90, 80, 96, 170, 60); lc.bezierCurveTo(90, 40, -20, 22, -130, 30); lc.fill();
+    lc.strokeStyle = '#1f8a5c'; lc.lineWidth = 20; lc.lineCap = 'round'; lc.beginPath(); lc.moveTo(-70, 50); lc.quadraticCurveTo(-110, 10, -96, -16); lc.stroke();
+    lc.fillStyle = '#f2d2bc'; lc.beginPath(); lc.ellipse(-150, 38, 27, 24, 0.4, 0, 7); lc.fill();         // his face, almost touching hers
+    lc.fillStyle = '#1a1a2a'; lc.beginPath(); lc.ellipse(-150, 58, 26, 14, 0.4, 0, Math.PI); lc.fill();
+    lc.fillStyle = '#d0b8ff'; for (const [x, y] of [[-150, 2], [-140, 40]]) { lc.beginPath(); lc.arc(x, y, 3, 0, 7); lc.fill(); }   // eyes
+    // a bouquet in her hand (Chagall's lovers often carry flowers)
+    lc.fillStyle = '#ff7aa8'; lc.beginPath(); lc.arc(-215, 28, 18, 0, 7); lc.fill(); lc.fillStyle = '#ffd84a'; lc.beginPath(); lc.arc(-215, 28, 6, 0, 7); lc.fill();
+    const LD = lc.getImageData(0, 0, L.width, L.height).data, LX = 20, LY = 10;
+    ctx.save(); ctx.filter = 'blur(1.2px)'; ctx.drawImage(L, LX, LY); ctx.restore();       // soft base
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 14000; i++) {                                                      // brush dabs sampled from the figures
+      const x = R(0, L.width), y = R(0, L.height), o = ((y | 0) * L.width + (x | 0)) * 4; if (LD[o + 3] < 128) continue;
+      const c = [LD[o], LD[o + 1], LD[o + 2]].map(v => clamp(v + R(-26, 26), 0, 255)), a = R(0, 6.28), l = R(4, 12);
+      ctx.strokeStyle = css(c, 0.55); ctx.lineWidth = R(3, 6);
+      ctx.beginPath(); ctx.moveTo(LX + x, LY + y); ctx.lineTo(LX + x + Math.cos(a) * l, LY + y + Math.sin(a) * l); ctx.stroke();
+    }
+    // a soft glow trail behind them, as if they flew in from the moon
+    for (let i = 0; i < 40; i++) { const t = i / 40, x = 560 + t * 360, y = 120 - Math.sin(t * 3) * 40;
+      ctx.fillStyle = `rgba(255,236,190,${0.08 * (1 - t)})`; ctx.beginPath(); ctx.arc(x, y, 30 * (1 - t) + 6, 0, 7); ctx.fill(); }
+    veil(5000, 0.08);                                                        // second veil over everything
+    inkOver(() => hex('#0a1240'), 1.0);
+    grain(0.04);
+  }
+
+  // ================= GEORGES SEURAT: pointillism =================
+  if (STYLE === 'seurat') {
+    const S = { // pure-colour dot mixtures per region
+      wall: ['#f4e8b0', '#a8d8f0', '#f0d080', '#c8e8c0', '#ffffff', '#f4c8a0'],
+      table: ['#c87a3a', '#e8a050', '#7a8ad8', '#f0c080'],
+      pa: ['#ff6aa0', '#ff9ac0', '#ffffff', '#d84a8a', '#ffd0a0'], pb: ['#e8203a', '#ff6a40', '#a02a6a', '#ffa060'], pc: ['#ffffff', '#ffe8f0', '#d8d8ff', '#fff0c0'],
+      leaf: ['#1a8a3a', '#4ab830', '#2a5ab8', '#e8e040', '#0a6a5a'], vaseW: ['#ffffff', '#e0e8ff', '#fff4e0'], vaseB: ['#1a3ab8', '#4a2ad8', '#2a7ad8'],
+      stamen: ['#ffd820', '#ff9a20', '#ffffff'], bud: ['#e8306a', '#ff8ab0', '#a02a6a'],
+    };
+    ctx.fillStyle = '#f2ead6'; ctx.fillRect(0, 0, W, H);
+    const pick = a => hex(a[(rand() * a.length) | 0]);
+    for (const [sp, r] of [[6, 3.4], [4.2, 2.6], [3.2, 2]]) {
+      for (let y = 0; y < H; y += sp) for (let x = 0; x < W; x += sp) {
+        const xx = x + R(-sp, sp) * 0.5, yy = y + R(-sp, sp) * 0.5, p = info(xx, yy);
+        let pal;
+        switch (p.k) { case WALL: pal = S.wall; break; case TABLE: pal = S.table; break; case PETAL: pal = p.role === 'a' ? S.pa : p.role === 'b' ? S.pb : S.pc; break;
+          case LEAF: case STEM: case SEPAL: pal = S.leaf; break; case VASE_W: pal = S.vaseW; break; case VASE_B: pal = S.vaseB; break; case STAMEN: pal = S.stamen; break; default: pal = S.bud; }
+        let c = pick(pal);
+        if (isObj(p.k) && p.puff < 0.2 && rand() < 0.5) c = hex(p.k === VASE_W ? '#6a7ad8' : '#3a2a8a');   // complementary dark dots in shadow
+        if (inkAt(xx, yy) > 0.5 && rand() < 0.7) c = hex('#2a2a6a');
+        ctx.fillStyle = css(c); ctx.beginPath(); ctx.arc(xx, yy, r * R(0.8, 1.15), 0, 7); ctx.fill();
+      }
+    }
+    // painted border of dots, as Seurat did
+    for (let i = 0; i < 9000; i++) { const t = rand(), side = (rand() * 4) | 0, b = R(0, 22);
+      const x = side === 0 ? t * W : side === 1 ? W - b : side === 2 ? t * W : b, y = side === 0 ? b : side === 1 ? t * H : side === 2 ? H - b : t * H;
+      ctx.fillStyle = css(hex(['#1a3a9a', '#e8403a', '#3a2a8a', '#ff9a30'][(rand() * 4) | 0])); ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); }
+  }
+
+  // ================= RENÉ MAGRITTE: blue sky, smooth paint, "Ceci n'est pas une pivoine." =================
+  if (STYLE === 'magritte') {
+    const P = { bloom: { a: ['#b8406a', '#f08aa8', '#ffe0e8'], b: ['#8a1a2a', '#d8403a', '#ffa890'], c: ['#c8c0c8', '#f4f0f0', '#ffffff'] },
+      leaf: ['#2a4a2a', '#4a7a3a', '#8ab06a'] };
+    const clouds = [[180, 210, 1.2], [560, 120, 0.9], [880, 300, 1.1], [120, 640, 0.8], [960, 760, 1.0], [700, 520, 0.7]];
+    const cloud = (x, y) => { let v = 0; for (const [cx, cy, s] of clouds) for (let k = 0; k < 5; k++) {
+      const bx = cx + (k - 2) * 42 * s, by = cy + (k % 2 ? -18 : 10) * s, r = (46 + 16 * Math.sin(k * 2.3 + cx)) * s;
+      v = Math.max(v, 1 - Math.hypot(x - bx, y - by) / r); } return v; };
+    fill((x, y) => {
+      const p = info(x, y), t = p.puff;
+      if (p.k === WALL) { let c = mix(hex('#3a78c8'), hex('#a8d0f0'), clamp(y / TY));   // daylight sky
+        const cv_ = cloud(x, y); if (cv_ > 0) c = mix(c, mix(hex('#c8d4e4'), hex('#ffffff'), clamp(cv_ * 2.2)), clamp(cv_ * 8)); return c; }
+      if (p.k === TABLE) return mix(hex('#8a7a68'), hex('#5a4e42'), (y - TY) / (H - TY));   // stone ledge
+      switch (p.k) {
+        case PETAL: { const B = P.bloom[p.role]; return t < 0.5 ? mix(hex(B[0]), hex(B[1]), t * 2) : mix(hex(B[1]), hex(B[2]), (t - 0.5) * 2); }
+        case LEAF: case SEPAL: return t < 0.5 ? mix(hex(P.leaf[0]), hex(P.leaf[1]), t * 2) : mix(hex(P.leaf[1]), hex(P.leaf[2]), (t - 0.5) * 2);
+        case STEM: return hex('#4a6a3a'); case STAMEN: return mix(hex('#c88a18'), hex('#f8d850'), t); case BUD: return mix(hex('#7a1a3a'), hex('#e8708a'), t);
+        case VASE_W: { const dx = (x - meta.vase.cx) / 190; return mix(hex('#f6f4f0'), hex('#b8bcc8'), clamp(Math.abs(dx + 0.3))); }
+        case VASE_B: return hex('#22409a');
+      }
+      return [0, 0, 0];
+    });
+    inkOver(p => p.k === WALL ? null : shade(hex('#2a2420'), 1), 0.55);
+    ctx.fillStyle = '#d8d0c0'; ctx.fillRect(0, TY - 4, W, 8);
+    ctx.fillStyle = '#1e1a16'; ctx.font = 'italic 62px "DejaVu Serif", "Liberation Serif", serif'; ctx.textAlign = 'center';
+    ctx.fillText("Ceci n'est pas une pivoine.", W / 2, H - 44);
+    grain(0.02);
+  }
+  window.DONE = true;
+})();
+</script></body></html>

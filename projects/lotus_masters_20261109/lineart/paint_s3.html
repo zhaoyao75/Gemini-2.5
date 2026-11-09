@@ -1,0 +1,204 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}</style></head>
+<body><canvas id="c"></canvas>
+<script src="meta.js"></script>
+<script>
+// Season 2, group 2: ?style=frida | rothko | gauguin | schiele | hockney | lichtenstein
+const meta = window.META;
+const STYLE = new URLSearchParams(location.search).get('style') || 'frida';
+const load = src => new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = src; });
+const px = im => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0); return x.getImageData(0, 0, im.width, im.height).data; };
+let seed = 777; const rand = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+const R = (a, b) => a + (b - a) * rand(), clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t), shade = (c, f) => c.map(v => clamp(v * f, 0, 255));
+const css = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const hash = (a, b, c = 0) => { const x = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453; return x - Math.floor(x); };
+const WALL = 0, TABLE = 1, VASE_W = 2, VASE_B = 3, STEM = 4, LEAF = 5, PETAL = 6, STAMEN = 7, BUD = 8, SEPAL = 9;
+const noise = (x, y) => Math.sin(x * 0.011 + Math.sin(y * 0.007) * 3) * Math.cos(y * 0.013 + Math.sin(x * 0.005) * 2);
+const isObj = k => k >= VASE_W;
+
+(async () => {
+  const [imC, imL, imI] = await Promise.all(['cls.png', 'line.png', 'cid.png'].map(load));
+  const C = px(imC), Ln = px(imL), I = px(imI), W = meta.W, H = meta.H, TY = meta.table_y;
+  const cv = document.getElementById('c'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
+  const info = (x, y) => { x = clamp(x | 0, 0, W - 1); y = clamp(y | 0, 0, H - 1); const o = (y * W + x) * 4; return { k: C[o], bl: C[o + 1], puff: C[o + 2] / 255, role: (meta.blooms[C[o + 1] - 1] || [0, 0, 0, 0, 'a'])[4] }; };
+  const inkAt = (x, y) => { x = clamp(x | 0, 0, W - 1); y = clamp(y | 0, 0, H - 1); const o = (y * W + x) * 4; return Ln[o] === 255 ? 0 : 1 - Ln[o + 1] / 255; };
+  const fill = fn => { const img = ctx.createImageData(W, H), d = img.data;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = fn(x, y), o = (y * W + x) * 4; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; }
+    ctx.putImageData(img, 0, 0); };
+  const inkOver = (colFn, gain = 1.2, thick = 0, jitter = 0) => { const img = ctx.getImageData(0, 0, W, H), d = img.data;
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const jx = jitter ? Math.round(jitter * Math.sin(y * 0.09 + x * 0.013)) : 0, jy = jitter ? Math.round(jitter * Math.cos(x * 0.08 - y * 0.011)) : 0;
+      let v = inkAt(x + jx, y + jy); if (thick) for (let t = 1; t <= thick; t++) v = Math.max(v, 0.85 * Math.max(inkAt(x - t + jx, y + jy), inkAt(x + t + jx, y + jy), inkAt(x + jx, y - t + jy), inkAt(x + jx, y + t + jy)));
+      if (v < 0.1) continue; const lc = colFn(info(x, y), x, y); if (!lc) continue; const o = (y * W + x) * 4, a = clamp(v * gain);
+      d[o] = d[o] * (1 - a) + lc[0] * a; d[o + 1] = d[o + 1] * (1 - a) + lc[1] * a; d[o + 2] = d[o + 2] * (1 - a) + lc[2] * a; }
+    ctx.putImageData(img, 0, 0); };
+  const grain = (a = 0.03) => { ctx.globalAlpha = a; for (let y = 0; y < H; y += 3) { ctx.fillStyle = rand() < 0.5 ? '#000' : '#fff'; ctx.fillRect(0, y, W, 1); } ctx.globalAlpha = 1; };
+  const smooth = (p, B) => p.puff < 0.5 ? mix(hex(B[0]), hex(B[1]), p.puff * 2) : mix(hex(B[1]), hex(B[2]), (p.puff - 0.5) * 2);
+
+  // ================= FRIDA KAHLO: naive, saturated, dense jungle of leaves, Mexican pink =================
+  if (STYLE === 'frida') {
+    const B = { a: ['#a8105a', '#e8308a', '#ff9ac8'], b: ['#8a0a1a', '#d8202a', '#ff7a5a'], c: ['#d8a050', '#fff0c8', '#ffffff'] };
+    // background: overlapping big tropical leaves (as in her self-portraits)
+    const leaves = []; for (let i = 0; i < 90; i++) leaves.push({ x: R(-60, W + 60), y: R(-60, TY), a: R(0, 6.28), l: R(110, 220), w: R(34, 60), c: ['#1e5a2a', '#2e7a32', '#4a9a3a', '#16422a', '#6aaa3a'][i % 5] });
+    fill((x, y) => {
+      const p = info(x, y);
+      if (p.k === WALL) {
+        let c = hex('#0e2a1a');
+        for (const L of leaves) { const dx = x - L.x, dy = y - L.y, ca = Math.cos(-L.a), sa = Math.sin(-L.a), lx = dx * ca - dy * sa, ly = dx * sa + dy * ca;
+          if (lx < 0 || lx > L.l) continue; const t = lx / L.l, half = L.w * Math.sin(Math.PI * Math.pow(t, 0.7));
+          if (Math.abs(ly) < half) { c = hex(L.c); if (Math.abs(ly) < 2.5) c = mix(c, hex('#a8d060'), 0.6); else if (Math.abs(Math.sin(lx * 0.08)) < 0.06) c = shade(c, 0.8); } }
+        return c; }
+      if (p.k === TABLE) return mix(hex('#e8306a'), hex('#c0204a'), (y - TY) / (H - TY));   // Mexican pink
+      switch (p.k) {
+        case PETAL: return smooth(p, B[p.role]); case STAMEN: return hex('#ffc820'); case BUD: return smooth(p, B.a);
+        case LEAF: case SEPAL: return mix(hex('#1a5a2a'), hex('#7ac040'), p.puff); case STEM: return hex('#3a7a2a');
+        case VASE_W: return mix(hex('#e8dcc0'), hex('#fffaf0'), p.puff); case VASE_B: return hex('#1a3aa8');
+      }
+      return [0, 0, 0];
+    });
+    inkOver(p => p.k === WALL ? null : hex('#2a1a10'), 1.0);
+    // folk border: stripes of yellow, green, pink along the table edge
+    [['#ffc820', 0], ['#2e9a3a', 12], ['#e8306a', 24]].forEach(([c, o]) => { ctx.fillStyle = c; ctx.fillRect(0, TY + o, W, 10); });
+    grain(0.03);
+  }
+
+  // ================= MARK ROTHKO: colour-field rectangles, the bouquet dissolved =================
+  if (STYLE === 'rothko') {
+    const bands = [[0.05, 0.36, '#e06a28'], [0.40, 0.72, '#b8182a'], [0.76, 0.95, '#5a0e1e']];
+    const base = hex('#7a1a1a');
+    fill((x, y) => {
+      const u = x / W, v = y / H;
+      let c = base;
+      for (const [y0, y1, col] of bands) {
+        const ex = Math.min(u - 0.06, 0.94 - u), ey = Math.min(v - y0, y1 - v);
+        const e = Math.min(ex * 4, ey * 6) + 0.05 * noise(x * 1.5, y * 1.5);
+        if (e > 0) c = mix(c, hex(col), clamp(e * 9));                                       // soft, feathered edges
+      }
+      // the bouquet survives only as a faint, luminous ghost inside the fields
+      const p = info(x, y);
+      if (isObj(p.k)) c = mix(c, p.k === PETAL ? hex('#ffb070') : p.k === VASE_W || p.k === VASE_B ? hex('#e8c8a0') : hex('#8a3020'), 0.16);
+      return shade(c, 1 + 0.05 * noise(x * 3, y * 3));
+    });
+    grain(0.05);
+  }
+
+  // ================= PAUL GAUGUIN: cloisonnism, flat warm Tahitian colour, decorative flowers =================
+  if (STYLE === 'gauguin') {
+    const B = { a: ['#c8306a', '#f06a8a', '#ffb0b0'], b: ['#a0202a', '#e04a2a', '#ff8a3a'], c: ['#e8b860', '#fff0c8', '#ffffff'] };
+    const band = (x, y) => { const t = y + 70 * Math.sin(x * 0.006 + 1); return t < 420 ? '#e87a2a' : t < 820 ? '#c8406a' : '#5a3a8a'; };   // flat bands of colour
+    fill((x, y) => {
+      const p = info(x, y);
+      if (p.k === WALL) {
+        let c = hex(band(x, y));
+        // little stylised white flowers scattered on the ground, as in Gauguin's backgrounds
+        const cs = 90, cx = Math.floor(x / cs), cy = Math.floor(y / cs), h = hash(cx, cy);
+        if (h < 0.4) { const fx = (cx + 0.3 + 0.4 * hash(cx, cy, 1)) * cs, fy = (cy + 0.3 + 0.4 * hash(cx, cy, 2)) * cs, dx = x - fx, dy = y - fy, r = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+          if (r < 18 * (0.55 + 0.45 * Math.abs(Math.cos(2.5 * a)))) c = r < 5 ? hex('#ffd02a') : hex('#fff4e0'); }
+        return c; }
+      if (p.k === TABLE) return hex('#3a2a6a');
+      const flat = (B_) => hex(B_[p.puff < 0.35 ? 0 : p.puff < 0.7 ? 1 : 2]);                   // flat zones, no gradients
+      switch (p.k) {
+        case PETAL: return flat(B[p.role]); case STAMEN: return hex('#ffd02a'); case BUD: return flat(B.a);
+        case LEAF: case SEPAL: return hex(p.puff < 0.5 ? '#1e5a3a' : '#4a8a3a'); case STEM: return hex('#5a7a2a');
+        case VASE_W: return hex(p.puff < 0.4 ? '#d8c8a8' : '#f4ead2'); case VASE_B: return hex('#2a3a9a');
+      }
+      return [0, 0, 0];
+    });
+    inkOver(() => hex('#1a1230'), 1.3, 2);                                                      // heavy dark-blue cloisonné outlines
+    grain(0.05);
+  }
+
+  // ================= EGON SCHIELE: nervous angular line, sparse gouache on paper =================
+  if (STYLE === 'schiele') {
+    const paper = hex('#e9dcc2');
+    const wash = { a: '#b8402a', b: '#8a1e1a', c: '#d8a060', leaf: '#5a6a2a', vase: '#7a8aa8', cob: '#2a3a6a', st: '#e0901a' };
+    // patchy, abrupt gouache: whole petals/leaves either painted or left bare
+    const patch = (p, x, y) => { const o = ((y | 0) * W + (x | 0)) * 4, id = I[o] | (I[o + 1] << 8) | (I[o + 2] << 16); return hash(id, 3, 9); };   // per petal / leaf
+    fill((x, y) => {
+      const p = info(x, y), n = noise(x * 1.4, y * 1.4);
+      let c = shade(paper, 1 + 0.035 * noise(x * 5, y * 5));
+      let col = null, amt = 0;
+      switch (p.k) {
+        case PETAL: col = wash[p.role]; amt = (patch(p, x, y) < 0.7 ? 0.95 : 0.15) * (1 - p.puff * 0.55); break;
+        case STAMEN: col = wash.st; amt = 0.95; break; case BUD: col = wash.b; amt = 0.9; break;
+        case LEAF: case SEPAL: case STEM: col = wash.leaf; amt = (patch(p, x, y) < 0.6 ? 0.85 : 0.1) * (1 - p.puff * 0.4); break;
+        case VASE_W: col = wash.vase; amt = 0.18 * (1 - p.puff); break; case VASE_B: col = wash.cob; amt = 0.85; break;
+      }
+      if (col) c = mix(c, hex(col), clamp(amt + 0.18 * n));
+      return c;
+    });
+    // white gouache halo hugging the outside of the forms
+    { const img = ctx.getImageData(0, 0, W, H), d = img.data;
+      for (let y = 6; y < H - 6; y++) for (let x = 6; x < W - 6; x++) {
+        const p = info(x, y); if (isObj(p.k)) continue;
+        let near = 0; for (const [dx, dy] of [[5, 0], [-5, 0], [0, 5], [0, -5], [9, 0], [-9, 0], [0, 9], [0, -9]]) if (isObj(info(x + dx, y + dy).k)) near = Math.max(near, Math.abs(dx) + Math.abs(dy) < 6 ? 1 : 0.55);
+        if (!near) continue; const o = (y * W + x) * 4, a = near * 0.75 * (0.7 + 0.3 * noise(x * 3, y * 3));
+        d[o] = d[o] * (1 - a) + 252 * a; d[o + 1] = d[o + 1] * (1 - a) + 248 * a; d[o + 2] = d[o + 2] * (1 - a) + 238 * a; }
+      ctx.putImageData(img, 0, 0); }
+    // nervous, angular, doubled contour: two jittered passes
+    inkOver(() => hex('#1e140e'), 1.6, 1, 3.2);
+    inkOver(p => p.k === PETAL ? hex('#5a120e') : hex('#2a1e14'), 0.6, 0, -4.5);
+    grain(0.05);
+  }
+
+  // ================= DAVID HOCKNEY: flat California acrylic, swimming-pool ripples =================
+  if (STYLE === 'hockney') {
+    const B = { a: ['#e8307a', '#ff7aa8', '#ffc0d8'], b: ['#e8202a', '#ff5a3a', '#ffa07a'], c: ['#f0d0b0', '#ffffff', '#ffffff'] };
+    fill((x, y) => {
+      const p = info(x, y);
+      if (p.k === WALL) {
+        if (y > 760) {                                                                         // the pool
+          let c = mix(hex('#2ab8e8'), hex('#1a8ad8'), (y - 760) / (TY - 760));
+          const r = Math.sin(x * 0.03 + Math.sin(y * 0.05) * 2.5 + y * 0.012) + Math.sin(x * 0.011 - y * 0.04);
+          if (r > 1.45) c = hex('#e8fbff'); else if (r > 1.25) c = hex('#8ae0ff'); else if (r < -1.4) c = hex('#1a6ac8');
+          return c; }
+        if (y > 720) return hex('#f2e8d0');                                                    // pool edge tiles
+        return y < 400 ? hex('#4ab0f0') : mix(hex('#4ab0f0'), hex('#a8dcf8'), (y - 400) / 320);  // flat sky
+      }
+      if (p.k === TABLE) return ((Math.floor(x / 60) + Math.floor(y / 30)) & 1) ? hex('#f4d84a') : hex('#f8e888');   // yellow patio tiles
+      switch (p.k) {
+        case PETAL: return smooth(p, B[p.role]); case STAMEN: return hex('#ffd82a'); case BUD: return smooth(p, B.a);
+        case LEAF: case SEPAL: return mix(hex('#1a9a4a'), hex('#8ad83a'), p.puff); case STEM: return hex('#4aa83a');
+        case VASE_W: return mix(hex('#f0f0f8'), hex('#ffffff'), p.puff); case VASE_B: return hex('#2a4ad8');
+      }
+      return [0, 0, 0];
+    });
+    inkOver(p => p.k === WALL ? null : hex('#1a2a5a'), 0.7);
+    // two palm trees on the horizon
+    const palm = (x0, h) => { ctx.strokeStyle = '#6a4a2a'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(x0, 722); ctx.quadraticCurveTo(x0 + 20, 722 - h / 2, x0 - 6, 722 - h); ctx.stroke();
+      ctx.strokeStyle = '#1a8a3a'; ctx.lineWidth = 8; for (let k = 0; k < 7; k++) { const a = -Math.PI / 2 + (k - 3) * 0.5; ctx.beginPath(); ctx.moveTo(x0 - 6, 722 - h); ctx.quadraticCurveTo(x0 - 6 + Math.cos(a) * 50, 722 - h + Math.sin(a) * 30 - 20, x0 - 6 + Math.cos(a) * 90, 722 - h + Math.sin(a) * 40 + 30); ctx.stroke(); } };
+    palm(70, 260); palm(1010, 300);
+  }
+
+  // ================= ROY LICHTENSTEIN: comic-book Ben-Day dots, primaries, heavy black line =================
+  if (STYLE === 'lichtenstein') {
+    const dots = (x, y, s, r) => { const cx = Math.floor(x / s), cy = Math.floor(y / s); return Math.hypot(x - (cx + 0.5) * s, y - (cy + 0.5) * s) < r; };
+    fill((x, y) => {
+      const p = info(x, y);
+      switch (p.k) {
+        case WALL: return dots(x, y, 18, 6.5) ? hex('#4a7ad8') : hex('#ffffff');               // blue dots on white
+        case TABLE: return hex('#ffe02a');
+        case PETAL: {
+          if (p.role === 'c') return p.puff > 0.7 ? hex('#ffffff') : dots(x, y, 12, 3.6) ? hex('#e8202a') : hex('#ffffff');
+          const red = p.role === 'b';
+          if (p.puff > 0.75) return hex('#ffffff');                                            // flat white highlight
+          return red ? hex('#e8202a') : (dots(x, y, 12, 4.8) ? hex('#e8202a') : hex('#ffffff'));  // pink = red dots on white
+        }
+        case STAMEN: return hex('#ffe02a'); case BUD: return hex('#e8202a');
+        case LEAF: case SEPAL: case STEM: return dots(x, y, 12, 4.6) ? hex('#1a8a3a') : hex('#ffe02a');   // green from dots over yellow
+        case VASE_W: return hex('#ffffff'); case VASE_B: return hex('#1a3ab8');
+      }
+      return [0, 0, 0];
+    });
+    inkOver(() => hex('#111111'), 1.5, 2);
+    // speech bubble
+    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#111'; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.ellipse(250, 130, 205, 92, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(330, 210); ctx.lineTo(400, 290); ctx.lineTo(380, 205); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(320, 196, 70, 14);
+    ctx.fillStyle = '#111'; ctx.font = 'bold 54px "DejaVu Sans", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('OH, PEONY!', 250, 150);
+  }
+  window.DONE = true;
+})();
+</script></body></html>
