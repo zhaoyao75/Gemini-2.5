@@ -5,7 +5,8 @@ Here: the video's 77 BPM grid played double-time (154 BPM feel), so every scene 
 One music bar = 16 steps = 2 video beats. Four Euclidean layers, as in the reference:
   KICK      E(4,16)  x...x...x...x...
   TRESILLO  E(3,8)   x.....x.....x...   -> 808 bass
-  CINQUILLO E(5,8)   x...x.x...x.x...   -> the hook, sung by a synthetic "vocal" (formant) lead
+  CINQUILLO E(5,8)   x...x.x...x.x...   -> chord comping
+  MELODY    E(9,16)  x.x.x.x.xx.x.x.x   -> the hook: F-centred, C4–C5, short notes, keeps returning to F4
   DEMBOW    snare    ...x..x....x..x.
 Harmony: Dm – B♭ – F – C, one chord per video bar. Hook = 2 music bars: the first identical every time, the second answers.
   0–1 s   vocal chord + 808 boom;  A–B kick, 808, hook;  C +dembow snare, chord plucks;  E +16th hats, pad
@@ -114,9 +115,13 @@ def crash():
 PROG = ["Dm", "Bb", "F", "C"]
 CH = {"Dm": [62, 65, 69], "Bb": [58, 62, 65], "F": [60, 65, 69], "C": [60, 64, 67]}
 ROOTS = {"Dm": 38, "Bb": 34, "F": 41, "C": 36}
-CALL = [69, 69, 67, 65, 62]                                  # bar 1, the same every time
-ANSWER = {"Dm": [65, 67, 69, 72, 69], "Bb": [65, 67, 69, 70, 69], "F": [65, 67, 69, 72, 74], "C": [64, 67, 69, 67, 64]}
-SYL = ["a", "o", "e", "a", "o"]
+# THE MELODY: F-centred, narrow (C4–C5), short dense notes on E(9,16), and it keeps coming back to F4.
+#   call   (bar 1, identical every time)  F F G F D F G F C   -> the last note C4 is a pickup that falls back to F4
+#   answer (bar 2, last two notes follow the chord)  F G A G F D F | x y
+MELODY = euclid(9, 16)                                       # x.x.x.x.xx.x.x.x
+CALL = [65, 65, 67, 65, 62, 65, 67, 65, 60]
+ANSWER_HEAD = [65, 67, 69, 67, 65, 62, 65]
+ANSWER_TAIL = {"Dm": [67, 60], "Bb": [69, 60], "F": [69, 72], "C": [67, 64]}
 def chord_at(vb): return PROG[int((vb - A0) // 4) % 4]
 def level(b, pts): xs, ys = zip(*pts); return float(np.interp(b, xs, ys))
 
@@ -132,19 +137,18 @@ for k in range(int((I0 - A0) / STEP)):
     if TRESILLO[s16]:
         ln = 6 if s16 < 12 else 4
         add("bass", b808(ROOTS[c] + (7 if s16 == 12 and mbar % 2 else 0), ln * STEP * VBEAT * 0.95), T(vb), gain=0.8)
-    if CINQUILLO[s16]:
-        j = sum(CINQUILLO[:s16]); m = (CALL if mbar % 2 == 0 else ANSWER[c])[j]
-        ln = CQ_LEN[j] * STEP * VBEAT * 0.92
-        add("keys", pluck(m, 0.34, 1.2), T(vb), pan=-0.3, gain=level(vb, [(A0, 0.7), (C0, 0.8)]))
+    if MELODY[s16]:
+        j = sum(MELODY[:s16]); notes = CALL if mbar % 2 == 0 else ANSWER_HEAD + ANSWER_TAIL[c]
+        add("keys", pluck(notes[j], 0.3, 1.2), T(vb), pan=-0.2, gain=level(vb, [(A0, 0.8), (C0, 0.9)]))
     if DEMBOW[s16]:
         if vb < C0: add("drums", rim(), T(vb), pan=0.2, gain=0.35)
         else: add("drums", snare(), T(vb), pan=0.05, gain=level(vb, [(C0, 0.45), (E0, 0.55)]))
     # hats: 8ths, 16ths from E, an open hat late in the bar
     if s16 % 2 == 0 or vb >= E0: add("drums", hat(), T(vb), pan=0.3, gain=(0.7 if s16 % 2 == 0 else 0.38))
     if vb >= C0 and s16 == 14: add("drums", hat(True), T(vb), pan=-0.2, gain=0.8)
-    # chord plucks on the off-beats from C
-    if vb >= C0 and s16 in (2, 10):
-        for m in CH[c]: add("keys", pluck(m, 0.35, 1.0), T(vb), pan=0.25, gain=0.3)
+    # chord comping on the CINQUILLO hits (E(5,8)) from C, softer than the melody
+    if vb >= C0 and CINQUILLO[s16]:
+        for m in CH[c]: add("keys", pluck(m, 0.3, 0.9), T(vb), pan=0.3, gain=0.2)
 # pad from E
 for vb in range(E0 - (E0 - A0) % 4, I0, 4):
     c = chord_at(vb); st = max(vb, E0); end = min(vb + 4, I0)
@@ -158,12 +162,12 @@ for vb, c, ln in ((I0, "Bb", 1.5), (I0 + 1.5, "C", 1.5), (I0 + 3, "F", TOTAL - I
     add("pad", pad(CH[c] + [CH[c][1] + 12], ln * VBEAT + 1.5, att=0.2), T(vb), gain=0.2)
     add("bass", b808(ROOTS[c], ln * VBEAT), T(vb), gain=0.55)
 add("drums", crash(), T(I0), gain=0.25)
-END = CALL + [65, 67, 69, 72, 72]                            # call, then resolve up to F's fifth/root
+END = [CALL[:-1] + [64], [65, 67, 69, 67, 65, 69, 72, 69, 65]]     # bar 1: call ending on E; bar 2: rises and settles on a long F
 for k in range(32):
     vb = I0 + k * STEP; s16 = k % 16
-    if CINQUILLO[s16] and vb < TOTAL - 0.5:
-        j = sum(CINQUILLO[:s16]) + 5 * (k // 16); last = j == 9
-        pass
+    if MELODY[s16] and vb < TOTAL - 0.5:
+        j = sum(MELODY[:s16]); last = k // 16 == 1 and j == 8
+        add("keys", pluck(END[k // 16][j], 2.2 if last else 0.3, 0.9), T(vb), pan=-0.2, gain=0.55)
     if s16 % 2 == 0 and vb < J0 + 2: add("drums", hat(), T(vb), pan=0.3, gain=0.1)
 for k, m in enumerate((53, 60, 65, 69, 72, 77)): add("keys", pluck(m, 1.8, 0.6), T(J0 + 1) + 0.05 * k, pan=-0.3 + 0.12 * k, gain=0.25)
 
