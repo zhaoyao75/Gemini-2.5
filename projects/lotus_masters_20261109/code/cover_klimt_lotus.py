@@ -23,7 +23,8 @@ glow = Image.new('RGB', (W, H), (0, 0, 0)); gd = ImageDraw.Draw(glow)
 for (x, y) in [(300, 1368), (780, 1368)]: gd.ellipse((x - 16, y - 8, x + 16, y + 8), fill=(255, 190, 60))
 big = glow.filter(ImageFilter.GaussianBlur(26)); P = ImageChops.add(P, big); P = ImageChops.add(P, glow.filter(ImageFilter.GaussianBlur(5)))
 dr = ImageDraw.Draw(P)
-def heavy(xy, text, size, fill):                                   # faux-bold: the font is regular weight, so stroke it
+def heavy(xy, text, size, fill):
+    while dr.textlength(text, font=f(size)) > 860: size -= 6                                   # faux-bold: the font is regular weight, so stroke it
     dr.text(xy, text, font=f(size), fill=fill, anchor='mm', stroke_width=max(3, size // 22), stroke_fill=fill)
 heavy((W // 2, 128), l1, 176, (255, 255, 255))
 heavy((W // 2, 308), l2, 196, (255, 236, 0))
