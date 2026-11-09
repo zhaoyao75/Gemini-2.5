@@ -108,7 +108,7 @@ const isObj = k => k >= VASE_W;
         case LEAF: case SEPAL: return dot(x, y, 13, 0.05) < 0.2 + 0.24 * p.puff ? K : Y;  // yellow leaves, dense black dots (reads darker than the petals)
         case STEM: return Y;
         case VASE_W: return dot(x, y, 22, 0.05) < 0.06 + 0.3 * p.puff ? K : Y;
-        case VASE_B: return K;
+        case VASE_B: return dot(x, y, 26, 0.05) < 0.2 ? K : Y;
       }
       return K;
     });

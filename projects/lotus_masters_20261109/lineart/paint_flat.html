@@ -24,7 +24,7 @@ const KLIMT = (() => {
     // scatter spirals and eye-circles on the wall, away from the bouquet
     let k = 0;
     for (let t = 0; t < 900 && motifs.length < 42; t++) {
-      const x = hash(t, 1) * W, y = hash(t, 2) * (meta.table_y - 30), p = info(x, y);
+      const x = hash(t, 1) * W, y = hash(t, 2) * Math.min(meta.table_y - 30, 1040), p = info(x, y);
       if (!p || p.k !== WALL) continue;
       const kind = t % 3 === 0 ? 'eye' : 'spiral', R = kind === 'eye' ? 20 + hash(t, 3) * 16 : 34 + hash(t, 4) * 40;
       if (motifs.some(m => Math.hypot(m.x - x, m.y - y) < m.R + R + 6)) continue;
