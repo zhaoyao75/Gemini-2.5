@@ -12,3 +12,5 @@ wait
 r picasso "paint_modern.html?style=picasso" & r mondrian "paint_modern.html?style=mondrian" & r kandinsky "paint_more.html?style=kandinsky" &
 r pollock "paint_more.html?style=pollock" & r dali "paint_more.html?style=dali" &
 wait
+# per-style bowl colours (each style's own bowl palette instead of the shared blue)
+for n in monet klimt matisse hockney vangogh lichtenstein seurat gauguin picasso dali; do python3 -I ../code/recolor_bowl.py . $O/lotus_$n.png $n; done
