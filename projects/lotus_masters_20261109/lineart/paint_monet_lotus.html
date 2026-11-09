@@ -34,23 +34,26 @@ const noise = (x, y) => Math.sin(x * 0.011 + Math.sin(y * 0.007) * 3) * Math.cos
     sky:  ['#f8e8c8', '#fbe0d0', '#e8e0f0'],
     deep: ['#5a72b8', '#6a62a8', '#4a8a98', '#3a5a98'],
     water:['#9cc8dc', '#b0d4e4', '#7ab4c8', '#c8e0ec', '#a8b8e0'],
-    porcelain: ['#f6f2f0', '#e8ecf6', '#f8f0e8', '#dcdcf0'], cobalt: ['#6c82cc', '#8296d8', '#7a74c0', '#5a8ac8', '#b4c0ec'],
+    porcelain: ['#f6f2f0', '#e8ecf6', '#f8f0e8', '#dcdcf0'], cobalt: ['#2f4fa8', '#3a5cb8', '#4a4a9c', '#2a6ab0', '#5a78c8'],
     leaf: ['#4a8a5a', '#6aa060', '#3a7a6a', '#8ab868', '#5a8aa0', '#a8c070', '#3c6a78'],
-    stem: ['#6a9a58', '#8ab468', '#5a8a70', '#9cb878'], stamen: ['#f8d848', '#f0b840', '#fff0a0', '#e8c858'],
+    stem: ['#4a8a48', '#5a9a58', '#3a7a5a', '#7aa858'], stamen: ['#f8d848', '#f0b840', '#fff0a0', '#e8c858'],
     pod: ['#9cb868', '#b8c878', '#88a860'],
     bloom: { a: ['#e88cb0', '#f4b0c8', '#fcd4e2', '#c878b0', '#fff0f4'], b: ['#f0a0bc', '#f8c0d0', '#e4a0c8', '#c888bc', '#fff4f6'] },
     bud: ['#e8709c', '#f4a0bc', '#d0609c', '#fcc8d8'],
   };
-  const LINECOL = { [PETAL]: '#8a3a78', [BUD]: '#8a3a78', [STAMEN]: '#8a6a20', [LEAF]: '#1e4a52', [STEM]: '#2a5a3a', [SEPAL]: '#2a5a3a', [VASE_W]: '#4a5aa0', [VASE_B]: '#3a4a98', [TABLE]: '#3a6a98', [WALL]: '#6a7ab0' };
+  const LINECOL = { [PETAL]: '#8a3a78', [BUD]: '#8a3a78', [STAMEN]: '#8a6a20', [LEAF]: '#1a4a3a', [STEM]: '#2a5a3a', [SEPAL]: '#2a5a3a', [VASE_W]: '#4a5aa0', [VASE_B]: '#3a4a98', [TABLE]: '#3a6a98', [WALL]: '#6a7ab0' };
   function color(p, x, y) {
     const lit = clamp(0.5 - (x / W - 0.5) * 0.6 - (y / H - 0.5) * 0.6);
     switch (p.k) {
-      case WALL: { const t = y / H; // sky glow high, deep water low, with a lily-pad dab here and there
+      case WALL: { const t = y / H; const nz = noise(x * 1.3, y * 1.3), nz2 = noise(x * 0.5 + 300, y * 0.7);
+        if (nz > 0.35 && rand() < 0.3) return pick(['#6a86c4', '#5a74b8', '#7a8ccc']);          // deeper water bands
+        if (nz2 < -0.4 && rand() < 0.5) return pick(['#f0d8e0', '#e8e4f4', '#d4ecd8']);         // pale reflected sky / pink light
+        if (Math.abs(nz) < 0.06 && rand() < 0.5) return pick(['#4a8a8a', '#5a9a7a']);            // dark-green reflection streaks // sky glow high, deep water low, with a lily-pad dab here and there
         if (rand() < 0.04 + 0.05 * (1 - t)) return mix(hex('#6aa070'), hex('#8ab090'), rand());
         return t < 0.3 ? mix(pick(P.wall), pick(P.sky), (0.3 - t) * 1.8 * rand()) : t > 0.82 ? mix(pick(P.wall), pick(P.deep), (t - 0.82) * 3.5 * rand()) : pick(P.wall); }
       case TABLE: return rand() < 0.15 ? hex('#fff6f0') : pick(P.water);
       case VASE_W: { const dx = (x - meta.vase.cx) / 190; return dx < -0.2 && rand() < 0.4 ? hex('#fffaf0') : dx > 0.3 && rand() < 0.5 ? hex('#c8c0e8') : pick(P.porcelain); }
-      case VASE_B: return mix(pick(P.cobalt), hex('#f4f0f8'), 0.3 * lit);
+      case VASE_B: return rand() < 0.1 + 0.2 * lit * (1 - p.puff) ? hex('#cfd8f4') : pick(P.cobalt);
       case STEM: return pick(P.stem);
       case SEPAL: return pick(P.pod);
       case LEAF: { const r = rand();
@@ -84,21 +87,21 @@ const noise = (x, y) => Math.sin(x * 0.011 + Math.sin(y * 0.007) * 3) * Math.cos
       else { const gx = puffAt(x + 3, y) - puffAt(x - 3, y), gy = puffAt(x, y + 3) - puffAt(x, y - 3);
              a = Math.abs(gx) + Math.abs(gy) > 1e-3 ? Math.atan2(gy, gx) + Math.PI / 2 + R(-0.3, 0.3) : R(0, 6.28); }
       const wide = p.k === WALL || p.k === TABLE;
-      const s = sz * (p.k === PETAL || p.k === STAMEN ? 0.7 : p.k === STEM || p.k === SEPAL ? 0.5 : p.k === VASE_B ? 0.6 : wide ? 1.15 : 1) * R(0.7, 1.3);
+      const s = sz * (p.k === PETAL || p.k === STAMEN ? 0.7 : p.k === STEM ? 0.8 : p.k === SEPAL ? 0.55 : p.k === VASE_B ? 0.6 : wide ? 1.15 : 1) * R(0.7, 1.3);
       ctx.fillStyle = css(c, R(0.75, 0.95));
       ctx.beginPath(); ctx.ellipse(x, y, s, s * (wide ? R(0.22, 0.34) : R(0.28, 0.42)), a, 0, 6.283); ctx.fill();
       if (rand() < 0.3) { ctx.fillStyle = css(c.map(v => clamp(v * 1.12 + 18, 0, 255)), 0.7); ctx.beginPath(); ctx.ellipse(x - 1, y - 1, s * 0.6, s * 0.15, a, 0, 6.283); ctx.fill(); }
     }
   }
   pass(14, 20, 9); pass(9, 14, 6); pass(6, 9.5, 3); pass(4.5, 6.5, 1.2, 0.7);
-  pass(4, 5, 0.6, 0.7, [STEM, STAMEN, SEPAL, BUD]);                       // small dabs: keep stems, pods and the bud legible
+  pass(4, 6, 0.6, 0.9, [STEM, STAMEN, SEPAL, BUD]); pass(3, 4.5, 0.4, 0.9, [STEM]);                       // small dabs: keep stems, pods and the bud legible
   // lily-pad ripples on the water: a few pale elliptical rings near the bowl rim and under the pads
   ctx.lineWidth = 1.6; for (let i = 0; i < 7; i++) { ctx.strokeStyle = css([255, 250, 240], 0.35); ctx.beginPath(); ctx.ellipse(500 + R(-60, 60), 1115 + R(-6, 6), 30 + i * 12, 4 + i * 1.6, 0, 0, 6.283); ctx.stroke(); }
   // ink lines -> faint coloured structure
   { const img = ctx.getImageData(0, 0, W, H), d = img.data;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const o = (y * W + x) * 4; if (Ln[o] === 255) continue;
-      const ink = 1 - Ln[o + 1] / 255; if (ink < 0.12) continue;
-      const k = Ln[o], lc = hex(LINECOL[k] || '#4a5a98'), al = clamp(ink * (k === WALL ? 0.0 : k === LEAF ? 0.55 : k === PETAL ? 0.5 : 0.6), 0, 0.7);
+      const ink = 1 - Ln[o + 1] / 255; if (ink < 0.05) continue;
+      const k = Ln[o], lc = hex(LINECOL[k] || '#4a5a98'), al = clamp(ink * (k === WALL ? 0.0 : k === LEAF ? 1.7 : k === STEM ? 1.4 : k === PETAL ? 0.7 : 0.8), 0, 0.85);
       d[o] = d[o] + (lc[0] - d[o]) * al; d[o + 1] = d[o + 1] + (lc[1] - d[o + 1]) * al; d[o + 2] = d[o + 2] + (lc[2] - d[o + 2]) * al; }
     ctx.putImageData(img, 0, 0); }
   ctx.globalAlpha = 0.035; for (let y = 0; y < H; y += 3) { ctx.fillStyle = rand() < 0.5 ? '#000' : '#fff'; ctx.fillRect(0, y, W, 1); } ctx.globalAlpha = 1;
