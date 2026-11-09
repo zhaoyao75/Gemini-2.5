@@ -6,28 +6,36 @@
 <body><canvas id="c" width="1080" height="1440"></canvas>
 <script>
 // 3:4 cover (1080x1440): black ground, white + yellow heavy title, pill subtitle, and the 100-seat Senate dot grid from the video.
-const W = 1080, H = 1440, ctx = document.getElementById('c').getContext('2d'), SANS = '"Noto Sans SC"';
+const WIDE = location.hash === '#43';
+const W = WIDE ? 1440 : 1080, H = WIDE ? 1080 : 1440, cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d'), SANS = '"Noto Sans SC"';
+// layout: title lines [x, y, size], text alignment, pill [x, y, w, h, font], watermark, dot grid (cols, spacing, centre)
+const L = WIDE
+  ? { t1: [80, 300, 150], t2: [80, 540, 200], align: 'left', pill: [80, 620, 520, 100, 54], wm: [80, 1040], cols: 10, sp: 64, cx: 1060, cy: 490 }
+  : { t1: [540, 250, 200], t2: [540, 480, 250], align: 'center', pill: [190, 560, 700, 104, 62], wm: [540, 1412], cols: 20, sp: 46, cx: 540, cy: 1000 };
 function outlined(str, x, y, size, fill, stroke, lw, glow) {
-  ctx.save(); ctx.font = `900 ${size}px ${SANS}`; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+  ctx.save(); ctx.font = `900 ${size}px ${SANS}`; ctx.textAlign = L.align; ctx.lineJoin = 'round';
   if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 36; }
   ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.strokeText(str, x, y); ctx.shadowBlur = 0; ctx.fillStyle = fill; ctx.fillText(str, x, y); ctx.restore();
 }
 function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-  const g = ctx.createRadialGradient(540, 1080, 80, 540, 1080, 620);
-  g.addColorStop(0, 'rgba(91,141,239,0.35)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 600, W, 840);
-  outlined('美国中期', 540, 250, 200, '#ffffff', '#000', 18, 'rgba(255,255,255,0.35)');
-  outlined('选举', 540, 480, 250, '#fff200', '#000', 20, 'rgba(255,230,0,0.45)');
-  ctx.save(); rr(190, 560, 700, 104, 52); ctx.fillStyle = '#000'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.stroke(); ctx.restore();
-  ctx.save(); ctx.font = `900 62px ${SANS}`; ctx.letterSpacing = '8px'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('一次看懂', 544, 636); ctx.restore();
-  // 100 Senate seats: 54 D, 44 R, 2 undecided
+  const g = ctx.createRadialGradient(L.cx, L.cy, 80, L.cx, L.cy, 620);
+  g.addColorStop(0, 'rgba(91,141,239,0.35)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  outlined('美国中期', L.t1[0], L.t1[1], L.t1[2], '#ffffff', '#000', 18, 'rgba(255,255,255,0.35)');
+  outlined('选举', L.t2[0], L.t2[1], L.t2[2], '#fff200', '#000', 20, 'rgba(255,230,0,0.45)');
+  const [px, py, pw, ph, pf] = L.pill;
+  ctx.save(); rr(px, py, pw, ph, ph / 2); ctx.fillStyle = '#000'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.font = `900 ${pf}px ${SANS}`; ctx.letterSpacing = '8px'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('一次看懂', px + pw / 2 + 4, py + ph * 0.7); ctx.restore();
+  // 100 Senate seats: 54 D, 44 R, 2 undecided (same dot grid as the video)
+  const rows = 100 / L.cols;
   for (let i = 0; i < 100; i++) {
-    const x = 540 + (i % 20 - 9.5) * 46, y = 900 + Math.floor(i / 20) * 56 + 100;
+    const x = L.cx + (i % L.cols - (L.cols - 1) / 2) * L.sp, y = L.cy + (Math.floor(i / L.cols) - (rows - 1) / 2) * (WIDE ? L.sp : 56) + (WIDE ? 0 : 100);
     const col = i < 54 ? '#5B8DEF' : i < 98 ? '#D2493F' : '#6A6E7A';
-    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 18; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 17, 0, 6.283); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 18; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, WIDE ? 20 : 17, 0, 6.283); ctx.fill(); ctx.restore();
   }
-  ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', 540, 1412); ctx.restore();
+  ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = L.align; ctx.fillText('@比特双子', L.wm[0], L.wm[1]); ctx.restore();
 }
 window.ready = (async () => {
   const sample = '美国中期选举一次看懂@比特双子';

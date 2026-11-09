@@ -37,7 +37,7 @@ async function main() {
     const beat = 60 / TL.bpm;
     const TB = TL.scenes_beats.D_title[1];
     const T = n => n < TB ? n / TB * TL.intro_seconds : TL.intro_seconds + (n - TB) * beat;
-    const times = [0.05, ...[6, 10, 17, 22, 27, 34, 38, 44, 52, 58, 64, 70, 76, 84, 98, 110].map(T)];
+    const times = [0.05, ...[6, 10, 15, 22, 26, 33, 36, 40, 43, 48, 53, 58, 63, 70, 80, 90].map(T)];
     for (let i = 0; i < times.length; i++) {
       fs.writeFileSync(path.join(dir, `k${i}.png`), await grab(first.page, times[i], Math.round(times[i] * TL.fps)));
     }

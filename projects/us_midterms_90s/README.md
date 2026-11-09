@@ -1,19 +1,24 @@
-# 美国中期选举一次看懂（85.7 秒）
+# 美国中期选举一次看懂（83.3 秒）
 
-沿用 `../douyin_vibe_friendship_paradox` 的工程做法：Canvas 画面（每帧只由时间 t 决定）→ Playwright 逐帧截图 → numpy 合成 77 BPM 配乐 → ffmpeg 合成。
+按 `../douyin_vibe_all_nighter/LESSONS.md`（及 friendship_paradox 那份）的经验制作：Canvas 画面（每帧只由时间 t 决定）→ Playwright 逐帧截图 → numpy 合成配乐 → ffmpeg 合成。
 
-- 成片：`exports/us_midterms_90s.mp4`（85.66 秒，1920×1080，30fps，-14.6 LUFS，无人声，中英双语字幕）
-- 封面：`exports/cover.png`（3:4，1080×1440）
-- 风格沿用 LESSONS.md 的偏好：纯黑底 + 金色点缀；标题卡 1 秒放最前；节奏 77 BPM；文字尽量少；水印 @比特双子；不放声明/参考页。
-- 结构（按拍）：标题 → 什么是中期选举 → 国会的四张牌 → 历史规律 → 选前局势 → 参议院（100 点阵，7 席翻转）→ 众议院（435 点阵，过半线 218）→ 州长 → 原因 → 接下来 → 收束提问
+- 成片：`exports/us_midterms_90s.mp4`（83.32 秒，1920×1080，30fps，视频节拍 66 BPM / 音乐 132 BPM，-13.4 LUFS，LRA 2.0 LU，无人声，中英双语字幕，**无音效**）
+- 封面：`exports/cover.png`（3:4）、`exports/cover_4x3.png`（4:3），`node src/cover.js` / `node src/cover.js 43`
+- 事实核查：`FACTS.md`（每个数字的出处与核实状态）
+- 配乐：`src/bgm.py` 改自 all_nighter 当前版（F 小调铺底 + 中音区慢旋律 + 欧几里德鼓点；鼓点掉落后重新进入落在第 35.55 秒，对准参议院第一席翻转）。**我听不到声音，响度/频段只能排除明显错误，好不好听需要人耳确认。**
+- 经验对照：纯黑底金色点缀；标题卡 1 秒放最前且第 0 帧完整；转场用交叠推镜（`scene()`），无黑场；字幕与顶部标签先出后进、不叠字；`sfx_beats` 为空；水印 @比特双子；不放声明/参考页，参考文献放评论。
+
+## 场景（拍，66 BPM）
+标题 0–4 → 什么是中期选举 4–12 → 国会的四张牌 12–20 → 历史规律 20–30 → 选前局势 30–38 → 参议院 38–50（第 42 拍第一席翻转）→ 众议院 50–60 → 州长 60–66 → 原因 66–76 → 接下来 76–86 → 收束提问 86–94
 
 ## 重新出片
 ```bash
 npm install
-python3 src/bgm.py && node src/render.js     # -> exports/us_midterms_90s.mp4（约 2.5 分钟）
-node src/render.js --keyframes               # 关键帧拼图
-node src/cover.js                            # 封面
+python3 src/bgm.py                          # 先出音频（约 10 秒），试听确认
+node src/render.js --keyframes              # 关键帧拼图
+node src/render.js                          # -> exports/us_midterms_90s.mp4（约 2.7 分钟）
 ```
+改 BPM 会按比例拉长/缩短全片（66 BPM × 94 拍 = 83.3 秒）；要保时长需同时调拍数。
 
 ## 数据与出处（截至 2026-11-09，计票仍在继续）
 | 内容 | 数字 | 出处 |
