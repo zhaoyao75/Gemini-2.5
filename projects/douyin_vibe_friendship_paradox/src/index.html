@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>为什么朋友都比你受欢迎</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-serif-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/eb-garamond/400-italic.css">
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Every frame is a pure function of time t (seconds). No requestAnimationFrame,
+// no Date, no unseeded randomness — so frame-by-frame rendering is repeatable.
+const TL = window.TL;                 // injected by render.js from timeline.json
+const BEAT = 60 / TL.bpm;
+const b = n => n * BEAT;              // beat index -> seconds
+// The title card lasts INTRO seconds; beat n >= TB is placed INTRO + (n - TB) beats into the video.
+const INTRO = TL.intro_seconds, TB = TL.scenes_beats.D_title[1];
+const T = n => n < TB ? n / TB * INTRO : INTRO + (n - TB) * BEAT;
+const S = Object.fromEntries(Object.entries(TL.scenes_beats).map(([k, [s, e]]) => [k, [T(s), T(e)]]));
+const DURATION = T(TL.total_beats) + TL.tail_seconds;
+
+const W = 1920, H = 1080;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---------- palette & fonts ----------
+const C = {
+  bgIn: '#0e0e0e', bgOut: '#000000',
+  text: '#EAEAF2', gray: '#8E8E93', gold: '#C9A96A', goldHi: '#E8CF94',
+  paper: '#EDE4D3', red: '#B53A2F',
+};
+const F = {
+  serif: '"Noto Serif SC"',
+  sans: '"Noto Sans SC"',
+  en: '"EB Garamond"',
+};
+
+// ---------- math helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const easeIO = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// fade in over fi, hold, fade out over fo, inside [t0, t1]
+const window01 = (t, t0, t1, fi = 0.4, fo = 0.35) => Math.min(prog(t, t0, t0 + fi), 1 - prog(t, t1 - fo, t1));
+
+// ---------- static random fields (seeded) ----------
+const STARS = (() => { const r = mulberry32(7); return Array.from({ length: 220 }, () => ({ x: r() * W, y: r() * H, s: 0.4 + r() * 1.3, ph: r() * 6.28, sp: 0.4 + r() * 1.2 })); })();
+const DUST = (() => { const r = mulberry32(11); return Array.from({ length: 46 }, () => ({ x: r() * W, y: r() * H, s: 0.8 + r() * 2.2, vx: (r() - .5) * 14, vy: -6 - r() * 16, ph: r() * 6.28 })); })();
+
+// ---------- text helpers ----------
+function text(str, x, y, { size = 40, family = F.sans, weight = 400, color = C.text, align = 'center', alpha = 1, italic = false, spacing = 0, baseline = 'alphabetic' } = {}) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${family}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  ctx.letterSpacing = spacing + 'px';
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// Bilingual subtitle band at 85–91% height
+function subtitle(t, t0, t1, zh, en) {
+  const a = window01(t, t0, t1);
+  if (a <= 0) return;
+  const rise = (1 - easeOut(prog(t, t0, t0 + 0.4))) * 8;
+  text(zh, W / 2, 948 + rise, { size: 46, weight: 700, alpha: a, spacing: 2 });
+  text(en, W / 2, 996 + rise, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+}
+
+// Small note band at ~70% height
+function note(t, t0, t1, str, x = W / 2, y = 790) {
+  const a = window01(t, t0, t1, 0.35, 0.3);
+  text(str, x, y, { size: 24, color: C.gray, alpha: a, spacing: 1 });
+}
+
+function topLabel(t, t0, t1, str) {
+  const a = window01(t, t0, t1, 0.5, 0.4);
+  if (a <= 0) return;
+  text(str, W / 2, 74, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+  ctx.save(); ctx.globalAlpha = a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92); ctx.lineTo(W / 2 + 40, 92); ctx.stroke(); ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function heart(x, y, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, 3);
+  ctx.bezierCurveTo(-7, -3, -4, -9, 0, -5); ctx.bezierCurveTo(4, -9, 7, -3, 0, 3);
+  ctx.fill(); ctx.restore();
+}
+
+function glowDot(x, y, r, color, glow, alpha = 1) {
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * glow);
+  g.addColorStop(0, color); g.addColorStop(0.25, color.replace(/[\d.]+\)$/, '0.35)')); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * glow, 0, 6.283); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- background ----------
+function background(t, frame) {
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, 80, W / 2, H * 0.5, W * 0.7);
+  g.addColorStop(0, C.bgIn); g.addColorStop(1, C.bgOut);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of STARS) {
+    const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * s.sp + s.ph));
+    ctx.fillStyle = `rgba(220,220,240,${a})`;
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+}
+function dust(t, alpha = 1) {
+  for (const d of DUST) {
+    const x = ((d.x + d.vx * t) % W + W) % W;
+    const y = ((d.y + d.vy * t) % H + H) % H;
+    const a = alpha * (0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.3 + d.ph)));
+    ctx.fillStyle = `rgba(232,207,148,${a})`;
+    ctx.beginPath(); ctx.arc(x, y, d.s, 0, 6.283); ctx.fill();
+  }
+}
+function finish(t, frame) {
+  // vignette
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // film grain, reseeded every frame
+  const r = mulberry32(1000 + frame);
+  for (let i = 0; i < 1800; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(r() * W, r() * H, 2, 2);
+  }
+  // watermark
+  text(TL.watermark, 60, 74, { size: 24, align: 'left', color: C.text, alpha: 0.35 });
+  // end fade (sample only)
+  const k = prog(t, DURATION - 0.6, DURATION);
+  if (k > 0) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- scene A: glowing moments cards ----------
+const CARDS = [
+  { name: '小林', time: '刚刚', cap: '冰岛 · 第 3 天', likes: 128, art: 'sunset', dy: -30 },
+  { name: 'Tim', time: '10 分钟前', cap: '新工作，第一天', likes: 203, art: 'work', dy: -14 },
+  { name: 'Mia', time: '3 分钟前', cap: '生日快乐！', likes: 96, art: 'party', dy: 40 },
+  { name: '朵朵', time: '1 小时前', cap: '周末露营', likes: 77, art: 'camp', dy: 34 },
+  { name: '阿杰', time: '2 小时前', cap: '演唱会！', likes: 154, art: 'concert', dy: -40 },
+];
+const CARD_TARGET_NODE = [17, 1, 3, 2, 12];
+const CW = 380, CH = 250;
+const CARD_S = 1.25;                                   // cards drawn 25% larger
+function cardPos(i, t) {
+  // two rows: 3 on top (slide in from the right), 2 below (from the left), brick-offset
+  const top = i < 3;
+  const baseX = top ? 960 + (i - 1) * 520 : 960 + (i - 3.5) * 520;
+  const j = top ? i : 4 - i;                          // the card nearest the entry side leads, so neighbours never collide
+  const slide = easeOut(clamp((t - j * 0.08) / 0.6));
+  const x = baseX + (top ? 1 : -1) * (1800 * (1 - slide) - 30 * t);
+  return { x, y: (top ? 315 : 675) + CARDS[i].dy * 0.15 };
+}
+function drawArt(kind, x, y, w, h, t) {
+  ctx.save(); roundRect(x, y, w, h, 10); ctx.clip();
+  if (kind === 'sunset') {
+    const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, '#5b3a7a'); g.addColorStop(0.6, '#e08a5a'); g.addColorStop(1, '#2b2850');
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = '#ffd28a'; ctx.beginPath(); ctx.arc(x + w * 0.62, y + h * 0.68, 26, Math.PI, 0); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,220,170,0.5)'; ctx.lineWidth = 2;
+    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(x + 40 + k * 20, y + h * 0.78 + k * 8); ctx.lineTo(x + w - 40 - k * 20, y + h * 0.78 + k * 8); ctx.stroke(); }
+  } else if (kind === 'party') {
+    ctx.fillStyle = '#2a1840'; ctx.fillRect(x, y, w, h);
+    const r = mulberry32(3); const cols = ['#ff8fa3', '#ffd166', '#7bdff2', '#c9a96a', '#b8f2a1'];
+    for (let k = 0; k < 60; k++) { ctx.fillStyle = cols[k % 5]; const px = x + r() * w, py = y + ((r() * h + t * 40 * (0.5 + r())) % h); ctx.fillRect(px, py, 5, 9); }
+  } else if (kind === 'work') {
+    ctx.fillStyle = '#1a2440'; ctx.fillRect(x, y, w, h);
+    const hs = [0.25, 0.4, 0.38, 0.6, 0.82];
+    hs.forEach((v, k) => { ctx.fillStyle = k === 4 ? C.goldHi : 'rgba(201,169,106,0.55)'; const bh = v * (h - 30) * easeOut(clamp(t / 1.2)); ctx.fillRect(x + 60 + k * 48, y + h - 15 - bh, 30, bh); });
+  } else if (kind === 'camp') {
+    ctx.fillStyle = '#101a33'; ctx.fillRect(x, y, w, h);
+    const r = mulberry32(5); ctx.fillStyle = '#fff';
+    for (let k = 0; k < 30; k++) ctx.fillRect(x + r() * w, y + r() * h * 0.6, 2, 2);
+    ctx.fillStyle = '#e8a87c'; ctx.beginPath(); ctx.moveTo(x + w / 2, y + 40); ctx.lineTo(x + w / 2 + 70, y + h - 12); ctx.lineTo(x + w / 2 - 70, y + h - 12); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffd28a'; ctx.beginPath(); ctx.moveTo(x + w / 2, y + 80); ctx.lineTo(x + w / 2 + 22, y + h - 12); ctx.lineTo(x + w / 2 - 22, y + h - 12); ctx.closePath(); ctx.fill();
+  } else if (kind === 'concert') {
+    ctx.fillStyle = '#0e0e22'; ctx.fillRect(x, y, w, h);
+    for (let k = 0; k < 3; k++) {
+      const ang = Math.sin(t * 2 + k * 2) * 0.35;
+      ctx.save(); ctx.translate(x + 80 + k * 90, y); ctx.rotate(ang);
+      const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(232,207,148,0.7)'); g.addColorStop(1, 'rgba(232,207,148,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(6, 0); ctx.lineTo(50, h); ctx.lineTo(-50, h); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+    ctx.fillStyle = '#05050f'; for (let k = 0; k < 14; k++) { ctx.beginPath(); ctx.arc(x + 14 + k * 26, y + h + 4, 16, 0, 6.283); ctx.fill(); }
+  }
+  ctx.restore();
+}
+function drawCard(i, cx, cy, scale, alpha, t) {
+  if (alpha <= 0 || scale <= 0.01) return;
+  const c = CARDS[i];
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.translate(cx, cy); ctx.scale(scale, scale); ctx.translate(-CW / 2, -CH / 2);
+  ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 40;
+  roundRect(0, 0, CW, CH, 18); ctx.fillStyle = '#151515'; ctx.fill();
+  ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(201,169,106,0.45)'; ctx.lineWidth = 1.5; ctx.stroke();
+  const ag = ctx.createLinearGradient(16, 14, 52, 50); ag.addColorStop(0, C.goldHi); ag.addColorStop(1, '#8a6a3a');
+  ctx.fillStyle = ag; ctx.beginPath(); ctx.arc(36, 34, 18, 0, 6.283); ctx.fill();
+  text(c.name, 66, 34, { size: 22, weight: 700, align: 'left', baseline: 'middle' });
+  text(c.time, CW - 18, 34, { size: 18, align: 'right', color: C.gray, baseline: 'middle' });
+  drawArt(c.art, 18, 62, CW - 36, 140, t);
+  text(c.cap, 20, 230, { size: 21, align: 'left', baseline: 'middle' });
+  heart(CW - 74, 228, 1.4, '#ff6b81');
+  text(String(c.likes), CW - 20, 230, { size: 20, align: 'right', color: C.text, baseline: 'middle' });
+  ctx.restore();
+}
+
+
+
+// ---------- network for scenes B & C ----------
+const NODES0 = [
+  [960, 470], [720, 330], [1210, 360], [1040, 640],
+  [430, 250], [560, 500], [400, 680], [650, 160], [880, 170], [1110, 190],
+  [1390, 200], [1580, 320], [1660, 530], [1450, 560], [1300, 730], [820, 720], [620, 690], [300, 450],
+];
+const EDGES = [
+  [0, 1], [0, 2], [0, 3],
+  [1, 4], [1, 5], [1, 7], [1, 8], [1, 17], [1, 16],
+  [2, 9], [2, 10], [2, 11], [2, 13], [2, 8],
+  [3, 14], [3, 15], [3, 13], [3, 16],
+  [4, 7], [4, 17], [5, 17], [5, 6], [6, 16], [7, 8], [9, 10], [10, 11], [11, 12], [12, 13], [13, 14], [15, 16], [8, 9],
+];
+let NODES = NODES0;
+const DEG = NODES0.map((_, i) => EDGES.filter(e => e.includes(i)).length);
+const nodeR = i => 3.5 + 1.9 * DEG[i];
+const NODE_APPEAR = NODES0.map((_, i) => { const k = CARD_TARGET_NODE.indexOf(i); return k >= 0 ? 0.35 + k * 0.06 : (i === 0 ? 0.5 : 0.4 + ((i * 37) % 17) / 17 * 0.9); });
+
+function sceneNetwork(t) {
+  NODES = NODES0.map(([x, y], i) => [x + 6 * Math.sin(t * 0.55 + i * 1.7), y + 5 * Math.cos(t * 0.47 + i * 2.3)]);
+  const [b0] = S.B_stars, [c0, c1] = S.C_counts;
+  if (t < b0 || t > c1 + 0.1) return;
+  const lt = t - b0;
+  const out = 1 - prog(t, c1 - 0.4, c1 + 0.1);
+  const zoom = 1 + 0.05 * prog(t, b0, c1);
+  ctx.save(); ctx.globalAlpha = out;
+  ctx.translate(W / 2, 470); ctx.scale(zoom, zoom); ctx.translate(-W / 2, -470);
+
+  // edges draw in progressively
+  EDGES.forEach(([a, c], k) => {
+    const s = 0.3 + k * 0.03;
+    const p = easeIO(prog(lt, s, s + 0.4));
+    if (p <= 0) return;
+    const [x1, y1] = NODES[a], [x2, y2] = NODES[c];
+    const youEdge = a === 0;
+    const hl = youEdge ? easeIO(prog(t, c0 + b(c), c0 + b(c) + 0.3)) : 0;
+    ctx.strokeStyle = hl > 0 ? `rgba(232,207,148,${0.25 + 0.5 * hl})` : 'rgba(180,180,220,0.22)';
+    ctx.lineWidth = 1.2 + hl * 1.3;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(lerp(x1, x2, p), lerp(y1, y2, p)); ctx.stroke();
+  });
+
+  // nodes
+  NODES.forEach(([x, y], i) => {
+    const ap = easeBack(prog(lt, NODE_APPEAR[i], NODE_APPEAR[i] + 0.35));
+    if (ap <= 0) return;
+    // in scene C friends of "you" swell when highlighted
+    let lit = 1;
+    if (i >= 1 && i <= 3) lit = 1 + 0.35 * easeBack(prog(t, c0 + b(i), c0 + b(i) + 0.35));
+    const r = nodeR(i) * ap * (i === 0 ? 0.8 : lit);
+    if (i === 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(t * 2.4);
+      ctx.strokeStyle = `rgba(200,200,230,${0.18 + 0.2 * pulse})`; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(x, y, r + 10 + pulse * 6, 0, 6.283); ctx.stroke();
+      glowDot(x, y, r, 'rgba(170,170,200,0.75)', 3, ap);
+      text('你', x, y + 42, { size: 28, weight: 700, color: C.text, alpha: ap * 0.9 });
+    } else {
+      const warm = clamp((DEG[i] - 2) / 5);
+      const col = `rgba(${Math.round(lerp(200, 240, warm))},${Math.round(lerp(205, 210, warm))},${Math.round(lerp(235, 150, warm))},${(0.55 + 0.45 * warm).toFixed(2)})`;
+      glowDot(x, y, r, col, 3.2 + warm * 2, ap);
+    }
+    // degree numbers (scene C)
+    let na;
+    if (i === 0) na = prog(t, c0, c0 + 0.4);
+    else if (i <= 3) na = prog(t, c0 + b(i), c0 + b(i) + 0.25);
+    else na = prog(t, c0 + b(4) + i * 0.02, c0 + b(4) + i * 0.02 + 0.35) * 0.75;
+    if (na > 0) {
+      const big = i <= 3;
+      text(String(DEG[i]), x, y - r - 16, { size: big ? 34 : 22, weight: 700, color: i === 0 ? C.text : C.goldHi, alpha: na, family: F.sans });
+    }
+  });
+  ctx.restore();
+}
+
+function sceneCards(t) {
+  const [a0, a1] = S.A_cards, [b0] = S.B_stars;
+  if (t < a0 || t > b0 + 1.0) return;
+  const fin = prog(t, a0, a0 + 0.25);
+  CARDS.forEach((c, i) => {
+    if (t < b0) { const p = cardPos(i, t - a0); drawCard(i, p.x, p.y, CARD_S, fin, t); return; }
+    // cards collapse into stars
+    const k = easeIO(prog(t, b0 + i * 0.05, b0 + i * 0.05 + 0.7));
+    const p0 = cardPos(i, b0 - a0), [nx, ny] = NODES[CARD_TARGET_NODE[i]];
+    drawCard(i, lerp(p0.x, nx, k), lerp(p0.y, ny, k), lerp(CARD_S, 0.02, k), 1 - prog(k, 0.75, 1), t);
+  });
+}
+
+// ---------- title card (opens the video, 1 s) ----------
+function sceneTitle(t) {
+  const [d0, d1] = S.D_title;
+  const a = window01(t, d0 - 1, d1, 0.4, 0.15);   // fully visible on frame 0, fades out over its last 0.15 s
+  if (a <= 0) return;
+  const lt = t - d0;
+  dust(t, a);
+  ctx.save();
+  const s = lerp(1.05, 1, easeOut(prog(lt, 0, 0.8)));
+  ctx.translate(W / 2, 500); ctx.scale(s, s);
+  const g = ctx.createLinearGradient(-560, 0, 560, 0);
+  const sw = clamp(lt / 0.8, 0, 1);              // one quick highlight sweep
+  g.addColorStop(0, '#B8935A'); g.addColorStop(clamp(sw - 0.12), '#C9A96A'); g.addColorStop(sw, '#FFF0C8'); g.addColorStop(clamp(sw + 0.12), '#C9A96A'); g.addColorStop(1, '#B8935A');
+  ctx.globalAlpha = a; ctx.font = `900 92px ${F.serif}`; ctx.textAlign = 'center'; ctx.fillStyle = g;
+  ctx.shadowColor = 'rgba(232,207,148,0.35)'; ctx.shadowBlur = 30;
+  ctx.fillText('《为什么朋友都比你受欢迎》', 0, 0);
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha = a * 0.6; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  const lw = lerp(120, 220, easeOut(prog(lt, 0, 0.3)));
+  ctx.beginPath(); ctx.moveTo(W / 2 - lw, 560); ctx.lineTo(W / 2 + lw, 560); ctx.stroke(); ctx.restore();
+  text('友谊悖论', W / 2, 626, { size: 40, weight: 700, alpha: a, spacing: 10 });
+  text('The Friendship Paradox', W / 2, 678, { size: 32, family: F.en, italic: true, color: C.gray, alpha: a });
+}
+
+// ---------- scene E: the 6-person network ----------
+const EC = [1310, 450], ER = 230;
+let LEAVES = [];
+function updateLeaves(t) { LEAVES = Array.from({ length: 5 }, (_, k) => { const ang = (-90 + 72 * k + 2.5 * Math.sin(t * 0.5 + k)) * Math.PI / 180; const r = ER * (1 + 0.025 * Math.sin(t * 1.1 + k * 1.3)); return [EC[0] + r * Math.cos(ang), EC[1] + r * Math.sin(ang)]; }); }
+function numberBadge(x, y, n, a, gold) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a;
+  ctx.fillStyle = 'rgba(8,8,8,0.9)'; ctx.strokeStyle = gold ? C.goldHi : 'rgba(200,200,230,0.6)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, 20, 0, 6.283); ctx.fill(); ctx.stroke(); ctx.restore();
+  text(String(n), x, y + 1, { size: 24, weight: 700, color: gold ? C.goldHi : C.text, alpha: a, baseline: 'middle' });
+}
+function goldCircleNum(x, y, n, a) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = C.gold; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.arc(x, y, 20, -Math.PI / 2, -Math.PI / 2 + 6.283 * clamp(a * 1.2)); ctx.stroke(); ctx.restore();
+  text(String(n), x, y + 1, { size: 22, weight: 700, color: C.gold, alpha: a, baseline: 'middle' });
+}
+function sceneSix(t) {
+  const [e0] = S.E1_rules, [e2] = S.E2_average, [e3, e4] = S.E3_edge;
+  if (t < e0 - 0.35) return;
+  updateLeaves(t);
+  const lt = t - e0 + 0.35;
+  const gA = prog(lt, 0, 0.3);
+
+  // ---- right: the star graph ----
+  const centerAp = easeBack(prog(lt, 0.05, 0.4));
+  const ePulse = prog(t, e3, e3 + 0.8); // light pulse travelling leaf -> center
+  LEAVES.forEach(([x, y], k) => {
+    const p = easeIO(prog(lt, 0.25 + k * 0.07, 0.65 + k * 0.07));
+    const hl = k === 0 ? easeIO(prog(t, e3, e3 + 0.5)) : 0;
+    ctx.strokeStyle = hl > 0 ? `rgba(232,207,148,${0.35 + 0.55 * hl})` : 'rgba(190,190,230,0.35)';
+    ctx.lineWidth = 1.6 + hl * 1.6;
+    ctx.beginPath(); ctx.moveTo(EC[0], EC[1]); ctx.lineTo(lerp(EC[0], x, p), lerp(EC[1], y, p)); ctx.stroke();
+    if (k === 0 && ePulse > 0 && ePulse < 1) {
+      const q = easeIO(ePulse);
+      glowDot(lerp(x, EC[0], q), lerp(y, EC[1], q), 5, 'rgba(255,230,170,0.95)', 5);
+    }
+  });
+  // center (小A)
+  glowDot(EC[0], EC[1], 22 * centerAp, 'rgba(240,210,150,0.95)', 3.6, gA);
+  text('Tim', EC[0], EC[1] + 66, { size: 28, weight: 700, alpha: gA * centerAp });
+  // leaves
+  LEAVES.forEach(([x, y], k) => {
+    const ap = easeBack(prog(lt, 0.5 + k * 0.07, 0.85 + k * 0.07));
+    const won = prog(t, e3 + b(2 + k), e3 + b(2 + k) + 0.35);  // leaf k counted in "5 / 6"
+    glowDot(x, y, 9 * ap, 'rgba(190,195,230,0.8)', 3, gA);
+    if (won > 0) {
+      ctx.save(); ctx.globalAlpha = won; ctx.strokeStyle = C.goldHi; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y, 18 + 10 * (1 - easeOut(won)), 0, 6.283); ctx.stroke(); ctx.restore();
+    }
+  });
+  // friend-count badges (E2)
+  numberBadge(EC[0] + 34, EC[1] - 38, 5, easeBack(prog(t, e2, e2 + 0.4)), true);
+  LEAVES.forEach(([x, y], k) => {
+    const bt = e2 + b(0.5 + 0.5 * k);
+    const ox = x >= EC[0] - 1 ? 30 : -30;
+    numberBadge(x + ox, y - 30, 1, easeBack(prog(t, bt, bt + 0.35)), false);
+  });
+  // edge-view annotation near the top leaf
+  const [lx, ly] = LEAVES[0];
+  const an = window01(t, e3 + 0.3, e4, 0.3, 0.4);
+  if (an > 0) {
+    ctx.save(); ctx.globalAlpha = an; ctx.strokeStyle = 'rgba(201,169,106,0.6)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(lx + 14, ly - 6); ctx.lineTo(lx + 90, ly - 40); ctx.lineTo(lx + 120, ly - 40); ctx.stroke(); ctx.restore();
+    text('我只有 1 个朋友，', lx + 130, ly - 54, { size: 24, align: 'left', alpha: an });
+    text('但他有 5 个朋友', lx + 130, ly - 22, { size: 24, align: 'left', color: C.goldHi, alpha: an });
+  }
+
+  // ---- left panel ----
+  const LX = 230;
+  // E1 rules
+  const r1 = window01(t, e0, e2 + 0.15, 0.3, 0.3);
+  if (r1 > 0) {
+    text('游戏规则', LX, 300, { size: 48, family: F.serif, weight: 900, color: C.gold, align: 'left', alpha: r1 });
+    text('The rules', LX + 214, 300, { size: 30, family: F.en, italic: true, color: C.gray, align: 'left', alpha: r1 });
+    const l1 = prog(t, e0 + b(1), e0 + b(1) + 0.3) * r1, l2 = prog(t, e0 + b(2), e0 + b(2) + 0.3) * r1;
+    goldCircleNum(LX + 20, 400, 1, l1);
+    text('Tim 认识其余 5 个人', LX + 64, 410, { size: 34, align: 'left', alpha: l1 });
+    text('Tim knows all five others', LX + 64, 448, { size: 24, family: F.en, italic: true, color: C.gray, align: 'left', alpha: l1 });
+    goldCircleNum(LX + 20, 520, 2, l2);
+    text('其余 5 人，只认识 Tim', LX + 64, 530, { size: 34, align: 'left', alpha: l2 });
+    text('The others know only Tim', LX + 64, 568, { size: 24, family: F.en, italic: true, color: C.gray, align: 'left', alpha: l2 });
+  }
+  // E2 average
+  const r2 = window01(t, e2 + 0.1, e3 + 0.15, 0.3, 0.3);
+  if (r2 > 0) {
+    text('平均每人有几个朋友？', LX, 300, { size: 40, weight: 700, align: 'left', alpha: r2 });
+    text('(5 + 1 + 1 + 1 + 1 + 1) ÷ 6', LX, 390, { size: 40, align: 'left', color: C.text, alpha: r2 * prog(t, e2 + 0.3, e2 + 0.7) });
+    const cnt = 1.7 * easeOut(prog(t, e2 + b(2), e2 + b(3.5)));
+    const ca = r2 * prog(t, e2 + b(2), e2 + b(2) + 0.3);
+    text('≈', LX, 540, { size: 80, color: C.gray, align: 'left', alpha: ca });
+    text(cnt.toFixed(1), LX + 80, 548, { size: 140, weight: 700, color: C.goldHi, align: 'left', alpha: ca });
+    text('个朋友', LX + 320, 540, { size: 36, align: 'left', color: C.gray, alpha: ca });
+  }
+  // E3 counter
+  const r3 = window01(t, e3 + 0.15, e4 + 1, 0.3, 0.3);
+  if (r3 > 0) {
+    let n = 0; for (let k = 0; k < 5; k++) if (t >= e3 + b(2 + k)) n++;
+    const bump = 1 + 0.12 * (1 - easeOut(prog(t, e3 + b(1 + n), e3 + b(1 + n) + 0.3)));
+    text('觉得「朋友比自己受欢迎」的人', LX, 320, { size: 32, align: 'left', alpha: r3 });
+    ctx.save(); ctx.translate(LX, 500); ctx.scale(bump, bump);
+    text(String(n), 0, 0, { size: 170, weight: 700, color: C.goldHi, align: 'left', alpha: r3 });
+    ctx.restore();
+    text('/ 6', LX + 120, 500, { size: 80, color: C.gray, align: 'left', alpha: r3 });
+  }
+}
+
+// =====================================================================
+//  Full-length scenes F–L
+// =====================================================================
+const MEAN_DEG = DEG.reduce((a, d) => a + d, 0) / DEG.length;                              // 3.44
+const EDGE_AVG = DEG.reduce((a, d) => a + d * d, 0) / DEG.reduce((a, d) => a + d, 0);      // 3.97 = friend-of-random-edge
+const warmCol = (w, a = 1) => `rgba(${Math.round(lerp(200, 240, w))},${Math.round(lerp(205, 210, w))},${Math.round(lerp(235, 150, w))},${(a * (0.55 + 0.45 * w)).toFixed(2)})`;
+function withGraph(scale, screenY, fn) { ctx.save(); ctx.translate(W / 2, screenY); ctx.scale(scale, scale); ctx.translate(-W / 2, -470); fn(); ctx.restore(); }
+function drawEdges(fn) { EDGES.forEach(([u, v]) => { const st = fn(u, v); ctx.strokeStyle = st.color; ctx.lineWidth = st.width; ctx.beginPath(); ctx.moveTo(NODES[u][0], NODES[u][1]); ctx.lineTo(NODES[v][0], NODES[v][1]); ctx.stroke(); }); }
+
+// ---------- F: the 1991 paper ----------
+function scenePaper(t) {
+  const [f0, f1] = S.F_paper;
+  const a = window01(t, f0 - 0.1, f1, 0.3, 0.3);
+  if (a <= 0) return;
+  const lt = t - f0, hit = lt - b(3);
+  const slide = easeOut(prog(lt, 0, 0.5));
+  const shake = hit > 0 && hit < 0.5 ? 7 * Math.exp(-9 * hit) * Math.sin(70 * hit) : 0;
+  ctx.save(); ctx.globalAlpha = a;
+  ctx.translate(W / 2, 450 + (1 - slide) * 70 + shake); ctx.rotate(-0.025 + 0.012 * Math.sin(t * 0.9));
+  const sc = lerp(0.94, 1, slide); ctx.scale(sc, sc);
+  const pw = 1000, ph = 520;
+  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
+  roundRect(-pw / 2, -ph / 2, pw, ph, 6);
+  const pg = ctx.createLinearGradient(0, -ph / 2, 0, ph / 2); pg.addColorStop(0, '#F1E9D8'); pg.addColorStop(1, '#E2D7C0');
+  ctx.fillStyle = pg; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  ctx.strokeStyle = 'rgba(90,70,40,0.35)'; ctx.lineWidth = 2; roundRect(-pw / 2 + 22, -ph / 2 + 22, pw - 44, ph - 44, 2); ctx.stroke();
+  text('MAY 1991 · AMERICAN JOURNAL OF SOCIOLOGY', 0, -ph / 2 + 92, { size: 22, color: '#6b5a40', spacing: 5 });
+  ctx.strokeStyle = 'rgba(90,70,40,0.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-300, -ph / 2 + 116); ctx.lineTo(300, -ph / 2 + 116); ctx.stroke();
+  text('Why Your Friends Have', 0, -48, { size: 70, family: F.en, italic: true, color: '#2a2118' });
+  text('More Friends Than You Do', 0, 40, { size: 70, family: F.en, italic: true, color: '#2a2118' });
+  text('Scott L. Feld', 0, 122, { size: 38, family: F.en, italic: true, color: '#4a3b28' });
+  text('Vol. 96, No. 6 · pp. 1464–1477', 0, ph / 2 - 52, { size: 20, color: '#7a6a50', spacing: 2 });
+  // red stamp slams down on beat 3
+  const k = prog(lt, b(3), b(3) + 0.2);
+  if (k > 0) {
+    ctx.save(); ctx.translate(330, 118); ctx.rotate(-0.22);
+    const ss = lerp(2.6, 1, easeOut(k)); ctx.scale(ss, ss); ctx.globalAlpha *= Math.min(1, k * 4);
+    ctx.strokeStyle = C.red; ctx.lineWidth = 6; roundRect(-140, -56, 280, 112, 10); ctx.stroke();
+    ctx.lineWidth = 2; roundRect(-131, -47, 262, 94, 6); ctx.stroke();
+    text('友谊悖论', 0, 20, { size: 58, family: F.serif, weight: 900, color: C.red, spacing: 4 });
+    ctx.restore();
+    if (hit > 0 && hit < 0.45) { ctx.save(); ctx.strokeStyle = `rgba(181,58,47,${0.5 * (1 - hit / 0.45)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(330, 118, 90 + 260 * easeOut(hit / 0.45), 0, 6.283); ctx.stroke(); ctx.restore(); }
+  }
+  ctx.restore();
+  text('图为示意 · 标题与出处取自原文献', W / 2, 790, { size: 22, color: C.gray, alpha: a * 0.8, spacing: 2 });
+}
+
+// ---------- G: why — every friendship lists both people ----------
+const PULSES = (() => {
+  const r = mulberry32(21), list = [];
+  EDGES.forEach(([a, c]) => list.push([a, c], [c, a]));
+  for (let i = list.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [list[i], list[j]] = [list[j], list[i]]; }
+  return list;
+})();
+function sceneWhy(t) {
+  const [g0, g1] = S.G_why;
+  const a = window01(t, g0 - 0.05, g1, 0.4, 0.4);
+  if (a <= 0) return;
+  const p0 = g0 + b(1), span = b(6), travel = 0.45, n = PULSES.length;
+  const count = new Array(NODES.length).fill(0), flash = new Array(NODES.length).fill(0);
+  PULSES.forEach(([u, v], k) => {
+    const arr = p0 + k / n * span + travel;
+    if (t >= arr) { count[v]++; flash[v] = Math.max(flash[v], 1 - prog(t, arr, arr + 0.35)); }
+  });
+  ctx.save(); ctx.globalAlpha = a;
+  withGraph(0.78, 410, () => {
+    drawEdges(() => ({ color: 'rgba(180,180,220,0.2)', width: 1.2 }));
+    PULSES.forEach(([u, v], k) => {
+      const st = p0 + k / n * span, q = prog(t, st, st + travel);
+      if (q <= 0 || q >= 1) return;
+      const e = easeIO(q);
+      glowDot(lerp(NODES[u][0], NODES[v][0], e), lerp(NODES[u][1], NODES[v][1], e), 4, 'rgba(255,226,160,0.95)', 5);
+    });
+    NODES.forEach(([x, y], i) => {
+      const c = count[i], r = 3.5 + 1.9 * c, w = clamp((c - 2) / 5);
+      if (i === 0) glowDot(x, y, Math.max(3, r * 0.8), 'rgba(170,170,200,0.75)', 3); else glowDot(x, y, r, warmCol(w), 3.2 + w * 2);
+      if (flash[i] > 0) { ctx.strokeStyle = `rgba(255,230,170,${0.8 * flash[i]})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 6 + 14 * (1 - flash[i]), 0, 6.283); ctx.stroke(); }
+      if (i === 0) text('你', x, y + 46, { size: 34, weight: 700 });
+      if (c > 0) text(String(c), x, y - r - 14, { size: i <= 3 ? 40 : 28, weight: 700, color: i === 0 ? C.text : C.goldHi, alpha: i <= 3 ? 1 : 0.8 });
+    });
+  });
+  // averages (computed from this very network)
+  const m0 = g0 + b(7.2), pa = prog(t, m0, m0 + 0.3), pb = prog(t, m0 + b(1), m0 + b(1) + 0.3);
+  const v1 = MEAN_DEG * easeOut(prog(t, m0, m0 + 0.7)), v2 = EDGE_AVG * easeOut(prog(t, m0 + b(1), m0 + b(1) + 0.7));
+  text('平均每个人有', 640, 730, { size: 28, color: C.gray, alpha: pa });
+  text(v1.toFixed(1), 600, 830, { size: 104, weight: 700, alpha: pa });
+  text('个朋友', 704, 826, { size: 32, color: C.gray, align: 'left', alpha: pa });
+  text('→', 960, 812, { size: 72, color: C.gold, alpha: pb });
+  text('他们的朋友平均有', 1290, 730, { size: 28, color: C.gray, alpha: pb });
+  text(v2.toFixed(1), 1250, 830, { size: 104, weight: 700, color: C.goldHi, alpha: pb });
+  text('个朋友', 1354, 826, { size: 32, color: C.gray, align: 'left', alpha: pb });
+  ctx.restore();
+}
+
+// ---------- H: 721 million Facebook users ----------
+const FB_DOTS = (() => { const r = mulberry32(31); return Array.from({ length: 1100 }, () => { const ang = r() * 6.283, rad = Math.sqrt(r()); return { x: Math.cos(ang) * rad, y: Math.sin(ang) * rad, s: 0.9 + r() * 1.8, big: r() < 0.05, ph: r() * 6.28 }; }); })();
+function sceneFB(t) {
+  const [h0, h1] = S.H_fb;
+  const a = window01(t, h0 - 0.05, h1, 0.4, 0.4);
+  if (a <= 0) return;
+  const lt = t - h0, ringAt = h0 + b(4), barsAt = h0 + b(8);
+  const fieldA = a * lerp(1, 0.28, prog(t, ringAt - 0.2, ringAt + 0.3)) * lerp(1, 0.5, prog(t, barsAt - 0.2, barsAt + 0.3));
+  FB_DOTS.forEach(d => {
+    const rad = Math.hypot(d.x, d.y), st = 0.1 + rad * b(3), ap = prog(lt, st, st + 0.3);
+    if (ap <= 0) return;
+    const tw = 0.6 + 0.4 * Math.sin(t * 1.5 + d.ph);
+    ctx.fillStyle = d.big ? `rgba(240,210,150,${(0.9 * ap * tw * fieldA).toFixed(3)})` : `rgba(200,205,235,${(0.55 * ap * tw * fieldA).toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(960 + d.x * 800, 470 + d.y * 330, d.s * (d.big ? 1.6 : 1), 0, 6.283); ctx.fill();
+  });
+  // phase 1: the count
+  const ta = window01(t, h0 + 0.2, ringAt, 0.3, 0.3);
+  if (ta > 0) {
+    const bgd = ctx.createRadialGradient(960, 470, 20, 960, 470, 360); bgd.addColorStop(0, `rgba(0,0,0,${0.75 * ta})`); bgd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bgd; ctx.fillRect(500, 200, 920, 540);
+    const v = 7.21 * easeOut(prog(t, h0 + 0.2, h0 + b(2.5)));
+    text(v.toFixed(2) + ' 亿', 960, 500, { size: 150, weight: 700, color: C.goldHi, alpha: ta });
+    text('Facebook 活跃用户 · 2011 年 5 月', 960, 566, { size: 34, color: C.gray, alpha: ta });
+  }
+  // phase 2: 92.7%
+  const ra = window01(t, ringAt - 0.1, barsAt, 0.35, 0.3);
+  if (ra > 0) {
+    const cx = 960, cy = 420, R = 170, k = easeOut(prog(t, ringAt + 0.1, ringAt + b(2)));
+    ctx.save(); ctx.globalAlpha *= ra; ctx.lineWidth = 26; ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.283); ctx.stroke();
+    ctx.strokeStyle = C.goldHi; ctx.shadowColor = 'rgba(232,207,148,0.5)'; ctx.shadowBlur = 24;
+    ctx.beginPath(); ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + 6.283 * 0.927 * k); ctx.stroke(); ctx.restore();
+    text((92.7 * k).toFixed(1) + '%', cx, cy + 32, { size: 86, weight: 700, alpha: ra });
+    text('占全部 7.21 亿活跃用户', cx, 680, { size: 30, color: C.gray, alpha: ra * prog(t, ringAt + b(2), ringAt + b(2) + 0.3) });
+  }
+  // phase 3: 190 vs 635
+  const ba = window01(t, barsAt - 0.1, h1, 0.35, 0.4);
+  if (ba > 0) {
+    const x0 = 480, maxW = 960;
+    [['平均每个用户', 190, 330], ['随机抽一个朋友', 635, 500]].forEach(([label, v, y], i) => {
+      const st = barsAt + i * b(1), k = easeOut(prog(t, st, st + 0.7)), la = ba * prog(t, st, st + 0.25), bw = maxW * v / 635 * k;
+      text(label, x0, y - 30, { size: 30, color: C.gray, align: 'left', alpha: la });
+      ctx.save(); ctx.globalAlpha *= ba; roundRect(x0, y, Math.max(2, bw), 52, 8);
+      ctx.fillStyle = i ? 'rgba(232,207,148,0.85)' : 'rgba(234,234,242,0.75)'; ctx.fill(); ctx.restore();
+      text(String(Math.round(v * k)), x0 + bw + 24, y + 42, { size: 58, weight: 700, color: i ? C.goldHi : C.text, align: 'left', alpha: la });
+    });
+  }
+}
+
+// ---------- I: the feed you actually see (illustration) ----------
+const feedBright = i => mulberry32(900 + i)() < 0.78;
+function sceneFeed(t) {
+  const [i0, i1] = S.I_feed;
+  const a = window01(t, i0 - 0.05, i1, 0.4, 0.4);
+  if (a <= 0) return;
+  const lt = t - i0, wx = 340, wy = 330, ww = 1240, wh = 280;
+  ctx.save(); ctx.globalAlpha = a;
+  roundRect(wx, wy, ww, wh, 26); ctx.strokeStyle = 'rgba(201,169,106,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.save(); roundRect(wx, wy, ww, wh, 26); ctx.clip();
+  for (let i = -8; i < 40; i++) {
+    const x = 1700 + i * 250 - 330 * lt;
+    if (x < wx - 140 || x > wx + ww + 140) continue;
+    const bright = feedBright(i), y = wy + wh / 2 + 6 * Math.sin(t * 1.2 + i);
+    ctx.save(); ctx.translate(x, y);
+    roundRect(-100, -95, 200, 190, 16);
+    ctx.shadowColor = bright ? 'rgba(232,207,148,0.5)' : 'transparent'; ctx.shadowBlur = bright ? 30 : 0;
+    ctx.fillStyle = bright ? '#1a1710' : '#101010'; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = bright ? 'rgba(232,207,148,0.8)' : 'rgba(142,142,147,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = bright ? C.goldHi : '#5a5a5e'; ctx.beginPath(); ctx.arc(-66, -58, 16, 0, 6.283); ctx.fill();
+    ctx.fillStyle = bright ? 'rgba(232,207,148,0.55)' : 'rgba(142,142,147,0.3)';
+    if (bright) {
+      ctx.save(); ctx.fillStyle = C.goldHi; ctx.font = `700 30px ${F.sans}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('Tim', -40, -62); ctx.restore();
+      roundRect(-40, -38, 70, 8, 4); ctx.fill();
+    } else { roundRect(-36, -66, 90, 10, 5); ctx.fill(); roundRect(-36, -46, 60, 8, 4); ctx.fill(); }
+    ctx.fillStyle = bright ? 'rgba(232,207,148,0.28)' : 'rgba(142,142,147,0.16)'; roundRect(-80, -10, 160, 70, 10); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+  const la = prog(t, i0 + b(1), i0 + b(1) + 0.4);
+  glowDot(700, 700, 9, 'rgba(240,210,150,0.95)', 3, la); text('朋友多的人发的', 730, 710, { size: 30, align: 'left', alpha: la });
+  glowDot(1130, 700, 9, 'rgba(150,150,160,0.8)', 2, la); text('其他人发的', 1160, 710, { size: 30, align: 'left', color: C.gray, alpha: la });
+  text('（示意动画，非真实数据）', W / 2, 790, { size: 24, color: C.gray, alpha: la * 0.8, spacing: 2 });
+  ctx.restore();
+}
+
+// ---------- J: who you compare yourself with ----------
+const BRIGHT = DEG.map((d, i) => d >= 4 ? i : -1).filter(i => i >= 0);   // the hubs: nodes 1,2,3,8,13,16
+function sceneZoom(t) {
+  const [j0, j1] = S.J_zoom;
+  const a = window01(t, j0 - 0.05, j1, 0.4, 0.3);
+  if (a <= 0) return;
+  const litAt = i => j0 + b(0.3 + 0.9 * BRIGHT.indexOf(i));
+  ctx.save(); ctx.globalAlpha = a;
+  withGraph(1, 470, () => {
+    drawEdges((u, v) => { const l = u === 0 ? prog(t, litAt(v), litAt(v) + 0.3) : 0; return { color: l > 0 ? `rgba(232,207,148,${0.2 + 0.5 * l})` : 'rgba(180,180,220,0.16)', width: 1.2 + l * 1.4 }; });
+    NODES.forEach(([x, y], i) => {
+      if (i === 0) { glowDot(x, y, nodeR(0) * 0.8, 'rgba(170,170,200,0.75)', 3); text('你', x, y + 46, { size: 30, weight: 700 }); return; }
+      const bi = BRIGHT.indexOf(i), l = bi >= 0 ? easeBack(prog(t, litAt(i), litAt(i) + 0.4)) : 0;
+      glowDot(x, y, nodeR(i) * (1 + 0.25 * l), l > 0.01 ? warmCol(1) : 'rgba(150,150,180,0.4)', l > 0.01 ? 5.5 : 2.6);
+      if (l > 0.01) {
+        const pz = 0.5 + 0.5 * Math.sin(t * 3 + i);
+        ctx.strokeStyle = `rgba(232,207,148,${0.35 + 0.3 * pz})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, nodeR(i) + 12 + 4 * pz, 0, 6.283); ctx.stroke();
+        text(String(DEG[i]), x, y - nodeR(i) - 22, { size: 30, weight: 700, color: C.goldHi, alpha: l });
+      }
+    });
+  });
+  ctx.restore();
+}
+
+// ---------- K: warm landing ----------
+function sceneWarm(t) {
+  const [k0, k1] = S.K_warm;
+  const a = window01(t, k0 - 0.05, k1, 0.4, 0.3);
+  if (a <= 0) return;
+  const lt = t - k0, z = lerp(1, 1.55, easeIO(prog(lt, 0, b(5)))), warm = easeIO(prog(lt, 0.1, 1.2));
+  ctx.save(); ctx.globalAlpha = a;
+  withGraph(z, 470, () => {
+    drawEdges((u, v) => u === 0 ? { color: `rgba(232,207,148,${0.15 + 0.5 * warm})`, width: 1.6 } : { color: 'rgba(180,180,220,0.1)', width: 1 });
+    NODES.forEach(([x, y], i) => { if (i) glowDot(x, y, nodeR(i) * 0.9, 'rgba(160,160,190,0.35)', 2.6); });
+    const [x, y] = NODES[0];
+    for (let k = 0; k < 6; k++) { const q = (lt - 0.2 - k * b(1)) / b(3); if (q > 0 && q < 1) { ctx.strokeStyle = `rgba(232,207,148,${0.5 * (1 - q)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, 16 + 150 * easeOut(q), 0, 6.283); ctx.stroke(); } }
+    glowDot(x, y, lerp(nodeR(0) * 0.8, 18, warm), `rgba(${Math.round(lerp(170, 245, warm))},${Math.round(lerp(170, 214, warm))},${Math.round(lerp(200, 150, warm))},${lerp(0.75, 0.98, warm).toFixed(2)})`, lerp(3, 4.2, warm));
+    text('你', x, y + 52, { size: 30, weight: 700 });
+  });
+  ctx.restore();
+}
+
+// ---------- L: closing question ----------
+function sceneEnd(t) {
+  const [l0, l1] = S.L_end;
+  const a2 = window01(t, l0 - 0.15, l1, 0.3, 0.2);
+  if (a2 <= 0) return;
+  const lt = t - l0 + 0.15, sg = easeBack(prog(lt, 0, 0.4));
+  dust(t, a2);
+  glowDot(960, 330, 16 * sg, 'rgba(245,214,150,0.98)', 6, a2);
+  text('你的朋友圈里，', 960, 500, { size: 84, weight: 700, alpha: a2 * prog(lt, 0.1, 0.45) });
+  text('谁是那颗最亮的星？', 960, 610, { size: 84, weight: 700, color: C.goldHi, alpha: a2 * prog(lt, 0.3, 0.65) });
+  text('Who is the brightest star in your network?', 960, 684, { size: 36, family: F.en, italic: true, color: C.gray, alpha: a2 * prog(lt, 0.55, 0.9) });
+}
+
+// ---------- compose ----------
+function render(t, frame = Math.round(t * TL.fps)) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  background(t, frame);
+  const [e0, e1] = [S.E1_rules[0], S.E3_edge[1]];
+  const [c1] = [S.C_counts[1]];
+  const [f0, f1] = S.F_paper, [g0, g1] = S.G_why, [h0, h1] = S.H_fb, [i0, i1] = S.I_feed, [j0, j1] = S.J_zoom, [k0, k1] = S.K_warm;
+  topLabel(t, S.A_cards[0] - 0.1, c1, '你 的 朋 友 圈');
+  topLabel(t, e0 - 0.3, e1, '一 张 6 个 人 的 网');
+  topLabel(t, f0 - 0.1, f1, '1991 · 美 国 社 会 学 杂 志');
+  topLabel(t, g0 - 0.1, g1, '为 什 么 ？');
+  topLabel(t, h0 - 0.1, h1, '2011 · 7.21 亿 用 户');
+  topLabel(t, i0 - 0.1, i1, '你 刷 到 的 动 态');
+  topLabel(t, j0 - 0.1, j1, '你 在 和 谁 比 ？');
+  topLabel(t, k0 - 0.1, k1, '从 边 上 看 向 中 心');
+  dust(t, 0.45);
+  sceneNetwork(t);
+  sceneCards(t);
+  sceneTitle(t);
+  { const eo = 1 - prog(t, e1 - 0.05, e1 + 0.3); if (eo > 0) { ctx.save(); ctx.globalAlpha = eo; sceneSix(t); ctx.restore(); } }
+  scenePaper(t);
+  sceneWhy(t);
+  sceneFB(t);
+  sceneFeed(t);
+  sceneZoom(t);
+  sceneWarm(t);
+  sceneEnd(t);
+  // subtitles
+  subtitle(t, S.A_cards[0] + 0.05, S.A_cards[1], '刷朋友圈时，别人总是过得更热闹？', 'Everyone else seems to have a fuller life?');
+  subtitle(t, S.B_stars[0] + 0.05, S.B_stars[1], '这不是错觉，是数学', "It's not a feeling. It's math.");
+  subtitle(t, S.C_counts[0] + 0.05, c1 + 0.1, '你有 3 个朋友，他们各有 7、6、5 个', 'You have 3 friends. They have 7, 6 and 5.');
+  note(t, S.C_counts[0] + 0.1, c1, '数字 = 这个人的朋友数　·　星越亮，朋友越多');
+  subtitle(t, e0 + 0.05, S.E1_rules[1], '来看一张最简单的网', 'Take the simplest network.');
+  subtitle(t, S.E2_average[0] + 0.1, S.E2_average[1], '平均每人，约 1.7 个朋友', 'On average: about 1.7 friends each.');
+  subtitle(t, S.E3_edge[0] + 0.05, S.E3_edge[0] + b(1.9), '但站在边上的人看出去——', 'But look from the edge—');
+  subtitle(t, S.E3_edge[0] + b(2), e1, '6 个人里，5 个人的朋友比自己受欢迎', 'Five out of six: their friend is more popular.');
+  subtitle(t, f0 + 0.05, f0 + b(3), '1991 年，社会学家费尔德问了个怪问题', 'In 1991, sociologist Scott Feld asked a strange question.');
+  subtitle(t, f0 + b(3), f1, '为什么你的朋友，朋友比你多？', 'Why do your friends have more friends than you?');
+  subtitle(t, g0 + 0.05, g0 + b(6), '因为朋友多的人，更容易出现在别人的列表里', 'Popular people show up on more friend lists.');
+  subtitle(t, g0 + b(6), g1, '平均下来，朋友们总是更多一点', 'On average, your friends always have a few more.');
+  subtitle(t, h0 + 0.05, h0 + b(4), '2011 年，研究者分析了 7.21 亿用户', 'In 2011, researchers mapped 721 million Facebook users.');
+  subtitle(t, h0 + b(4), h0 + b(8), '92.7% 的人，好友数比朋友们的平均值少', '92.7% had fewer friends than their friends\' average.');
+  subtitle(t, h0 + b(8), h1, '平均 190 个好友，朋友的平均却是 635', 'The average user: 190 friends. A random friend: 635.');
+  subtitle(t, i0 + 0.05, i0 + b(4), '还有一层：热闹的人，往往发得也多', 'And the lively ones tend to post more.');
+  subtitle(t, i0 + b(4), i1, '你刷到的，是被挑过的生活', 'What you see is a curated slice of life.');
+  subtitle(t, j0 + 0.05, j0 + b(3), '你比较的，往往不是普通人', "You're rarely comparing yourself to the average —");
+  subtitle(t, j0 + b(3), j1, '而是网里最亮的那几颗星', 'but to the brightest stars in the network.');
+  subtitle(t, k0 + 0.05, k0 + b(3), '你不是不够好', "You're not less.");
+  subtitle(t, k0 + b(3), k1, '只是从边上，看向中心', "You're just looking from the edge, toward the center.");
+  finish(t, frame);
+}
+
+// all strings drawn, so every font subset is loaded before frame 0
+window.ALL_TEXT = document.documentElement.innerHTML;
+window.ready = (async () => {
+  const sample = window.ALL_TEXT;
+  await Promise.all([
+    document.fonts.load(`900 92px ${F.serif}`, sample),
+    document.fonts.load(`400 40px ${F.sans}`, sample),
+    document.fonts.load(`700 40px ${F.sans}`, sample),
+    document.fonts.load(`italic 400 30px ${F.en}`, sample),
+  ]);
+  await document.fonts.ready;
+  return { duration: DURATION, frames: Math.ceil(DURATION * TL.fps) };
+})();
+window.render = render;
+</script>
+</body>
+</html>

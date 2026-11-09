@@ -1,0 +1,15 @@
+{
+  "name": "douyin-vibe-friendship-paradox",
+  "private": true,
+  "description": "Vibe知识大赏《为什么朋友都比你受欢迎》code-rendered video",
+  "scripts": {
+    "bgm": "python3 src/bgm.py",
+    "keyframes": "node src/render.js --keyframes",
+    "render": "node src/render.js"
+  },
+  "dependencies": {
+    "@fontsource/eb-garamond": "5.1.1",
+    "@fontsource/noto-sans-sc": "5.1.1",
+    "@fontsource/noto-serif-sc": "5.1.1"
+  }
+}
