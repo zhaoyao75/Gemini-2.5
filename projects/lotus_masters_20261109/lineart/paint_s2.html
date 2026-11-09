@@ -225,7 +225,7 @@ const isObj = k => k >= VASE_W;
       ctx.fillStyle = css(hex(['#1a3a9a', '#e8403a', '#3a2a8a', '#ff9a30'][(rand() * 4) | 0])); ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill(); }
   }
 
-  // ================= RENÉ MAGRITTE: blue sky, smooth paint, "Ceci n'est pas une pivoine." =================
+  // ================= RENÉ MAGRITTE: blue sky, smooth paint, "Ceci n'est pas un lotus." =================
   if (STYLE === 'magritte') {
     const P = { bloom: { a: ['#b8406a', '#f08aa8', '#ffe0e8'], b: ['#8a1a2a', '#d8403a', '#ffa890'], c: ['#c8c0c8', '#f4f0f0', '#ffffff'] },
       leaf: ['#2a4a2a', '#4a7a3a', '#8ab06a'] };
@@ -250,7 +250,7 @@ const isObj = k => k >= VASE_W;
     inkOver(p => p.k === WALL ? null : shade(hex('#2a2420'), 1), 0.55);
     ctx.fillStyle = '#d8d0c0'; ctx.fillRect(0, TY - 4, W, 8);
     ctx.fillStyle = '#1e1a16'; ctx.font = 'italic 62px "DejaVu Serif", "Liberation Serif", serif'; ctx.textAlign = 'center';
-    ctx.fillText("Ceci n'est pas une pivoine.", W / 2, H - 44);
+    ctx.fillText("Ceci n'est pas un lotus.", W / 2, H - 44);
     grain(0.02);
   }
   window.DONE = true;

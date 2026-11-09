@@ -11,6 +11,7 @@ r seurat "paint_s2.html?style=seurat" & r gauguin "paint_s3.html?style=gauguin" 
 wait
 r picasso "paint_modern.html?style=picasso" & r mondrian "paint_modern.html?style=mondrian" & r kandinsky "paint_more.html?style=kandinsky" &
 r pollock "paint_more.html?style=pollock" & r dali "paint_more.html?style=dali" &
+r munch "paint_more.html?style=munch" & r schiele "paint_s3.html?style=schiele" & r magritte "paint_s2.html?style=magritte" &
 wait
 # per-style bowl colours (each style's own bowl palette instead of the shared blue)
-for n in monet klimt matisse hockney vangogh lichtenstein seurat gauguin picasso dali; do python3 -I ../code/recolor_bowl.py . $O/lotus_$n.png $n; done
+for n in monet klimt matisse hockney vangogh lichtenstein seurat gauguin picasso dali munch schiele magritte; do python3 -I ../code/recolor_bowl.py . $O/lotus_$n.png $n; done

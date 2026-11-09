@@ -18,6 +18,9 @@ PAL = {
  'seurat':       ('#d8560e', '#fcae58', '#2a48a8', '#78a0e8'),   # orange bowl, blue vine
  'gauguin':      ('#0a9a94', '#5ae8d8', '#ffd020', '#fff090'),   # turquoise bowl, yellow vine
  'picasso':      ('#a8402c', '#e89070', '#f0e4c8', '#fffaf0'),   # terracotta bowl, cream vine
+ 'munch':        ('#14705a', '#4ac8a0', '#f4c020', '#fff090'),
+ 'schiele':      ('#7a4428', '#d8a070', '#26466a', '#6a96c0'),
+ 'magritte':     ('#8a1018', '#e0505a', '#ffffff', '#ffffff'),
  'dali':         ('#7a1018', '#d8404a', '#c8982c', '#f8e090'),   # deep red bowl, gold vine
 }
 if style not in PAL: sys.exit(0)
