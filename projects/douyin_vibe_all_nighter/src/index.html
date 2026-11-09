@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>熬一个通宵 ≈ 醉驾？</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-serif-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/eb-garamond/400-italic.css">
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Every frame is a pure function of time t (seconds). No requestAnimationFrame,
+// no Date, no unseeded randomness — so frame-by-frame rendering is repeatable.
+const TL = window.TL;                 // injected by render.js from timeline.json
+const BEAT = 60 / TL.bpm;
+const b = n => n * BEAT;              // beat index -> seconds
+// The title card lasts INTRO seconds; beat n >= TB is placed INTRO + (n - TB) beats into the video.
+const INTRO = TL.intro_seconds, TB = TL.scenes_beats.D_title[1];
+const T = n => n < TB ? n / TB * INTRO : INTRO + (n - TB) * BEAT;
+const S = Object.fromEntries(Object.entries(TL.scenes_beats).map(([k, [s, e]]) => [k, [T(s), T(e)]]));
+const DURATION = T(TL.total_beats) + TL.tail_seconds;
+
+const W = 1920, H = 1080;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---------- palette & fonts ----------
+const C = {
+  bgIn: '#0e0e0e', bgOut: '#000000',
+  text: '#EAEAF2', gray: '#8E8E93', gold: '#C9A96A', goldHi: '#E8CF94',
+  paper: '#EDE4D3', red: '#B53A2F',
+};
+const F = {
+  serif: '"Noto Serif SC"',
+  sans: '"Noto Sans SC"',
+  en: '"EB Garamond"',
+};
+
+// ---------- math helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const easeIO = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// fade in over fi, hold, fade out over fo, inside [t0, t1]
+const window01 = (t, t0, t1, fi = 0.4, fo = 0.35) => Math.min(prog(t, t0, t0 + fi), 1 - prog(t, t1 - fo, t1));
+
+// ---------- static random fields (seeded) ----------
+const STARS = (() => { const r = mulberry32(7); return Array.from({ length: 220 }, () => ({ x: r() * W, y: r() * H, s: 0.4 + r() * 1.3, ph: r() * 6.28, sp: 0.4 + r() * 1.2 })); })();
+const DUST = (() => { const r = mulberry32(11); return Array.from({ length: 46 }, () => ({ x: r() * W, y: r() * H, s: 0.8 + r() * 2.2, vx: (r() - .5) * 14, vy: -6 - r() * 16, ph: r() * 6.28 })); })();
+
+// ---------- text helpers ----------
+function text(str, x, y, { size = 40, family = F.sans, weight = 400, color = C.text, align = 'center', alpha = 1, italic = false, spacing = 0, baseline = 'alphabetic' } = {}) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${family}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  ctx.letterSpacing = spacing + 'px';
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// Bilingual subtitle band at 85–91% height
+function subtitle(t, t0, t1, zh, en) {
+  const a = window01(t, t0, t1);
+  if (a <= 0) return;
+  const rise = (1 - easeOut(prog(t, t0, t0 + 0.4))) * 8;
+  text(zh, W / 2, 948 + rise, { size: 46, weight: 700, alpha: a, spacing: 2 });
+  text(en, W / 2, 996 + rise, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+}
+
+// Small note band at ~70% height
+function note(t, t0, t1, str, x = W / 2, y = 790) {
+  const a = window01(t, t0, t1, 0.35, 0.3);
+  text(str, x, y, { size: 24, color: C.gray, alpha: a, spacing: 1 });
+}
+
+function topLabel(t, t0, t1, str) {
+  const a = window01(t, t0, t1, 0.5, 0.4);
+  if (a <= 0) return;
+  text(str, W / 2, 74, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+  ctx.save(); ctx.globalAlpha = a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92); ctx.lineTo(W / 2 + 40, 92); ctx.stroke(); ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function heart(x, y, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, 3);
+  ctx.bezierCurveTo(-7, -3, -4, -9, 0, -5); ctx.bezierCurveTo(4, -9, 7, -3, 0, 3);
+  ctx.fill(); ctx.restore();
+}
+
+function glowDot(x, y, r, color, glow, alpha = 1) {
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * glow);
+  g.addColorStop(0, color); g.addColorStop(0.25, color.replace(/[\d.]+\)$/, '0.35)')); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * glow, 0, 6.283); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- background ----------
+function background(t, frame) {
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, 80, W / 2, H * 0.5, W * 0.7);
+  g.addColorStop(0, C.bgIn); g.addColorStop(1, C.bgOut);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of STARS) {
+    const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * s.sp + s.ph));
+    ctx.fillStyle = `rgba(220,220,240,${a})`;
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+}
+function dust(t, alpha = 1) {
+  for (const d of DUST) {
+    const x = ((d.x + d.vx * t) % W + W) % W;
+    const y = ((d.y + d.vy * t) % H + H) % H;
+    const a = alpha * (0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.3 + d.ph)));
+    ctx.fillStyle = `rgba(232,207,148,${a})`;
+    ctx.beginPath(); ctx.arc(x, y, d.s, 0, 6.283); ctx.fill();
+  }
+}
+function finish(t, frame) {
+  // vignette
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // film grain, reseeded every frame
+  const r = mulberry32(1000 + frame);
+  for (let i = 0; i < 1800; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(r() * W, r() * H, 2, 2);
+  }
+  // watermark
+  text(TL.watermark, 60, 74, { size: 24, align: 'left', color: C.text, alpha: 0.35 });
+  // end fade (sample only)
+  const k = prog(t, DURATION - 0.6, DURATION);
+  if (k > 0) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// =====================================================================
+//  《熬一个通宵 ≈ 醉驾？》
+//  Transitions: neighbouring scenes overlap and "push" through each other (old one shrinks and
+//  fades while the new one settles from slightly larger), so there is never a dark gap.
+// =====================================================================
+const AMBER = '#E8A33A', RED = '#E0554A';
+const DRIFT = t => [6 * Math.sin(t * 0.31), 4 * Math.sin(t * 0.23 + 1)];
+function scene(t, key, fn, o = {}) {
+  const [s0, s1] = S[key];
+  const fi = o.fi ?? 0.45, fo = o.fo ?? 0.4;
+  // staggered hand-over: the old scene is almost gone by the boundary, the new one pushes in right after it
+  const kin = s0 <= 0 ? 1 : easeOut(prog(t, s0 - 0.1, s0 - 0.1 + fi));
+  const kout = easeIO(prog(t, s1 - fo + 0.1, s1 + 0.1));
+  if (kin <= 0 || kout >= 1) return;
+  const sc = lerp(o.zin ?? 1.07, 1, kin) * lerp(1, o.zout ?? 0.93, kout) * (1 + 0.035 * prog(t, s0, s1));   // slow push-in inside every scene
+  const [dx, dy] = DRIFT(t);
+  ctx.save(); ctx.globalAlpha *= kin * (1 - kout);
+  ctx.translate(W / 2 + dx, 470 + dy); ctx.scale(sc, sc); ctx.translate(-W / 2, -470);
+  fn(t - s0);
+  ctx.restore();
+}
+// subtitles / labels slide: in from below, out upwards — consecutive lines hand over without a dip
+function slideText(t, t0, t1, draw) {
+  const kin = easeOut(prog(t, t0, t0 + 0.18)), kout = easeIO(prog(t, t1 - 0.16, t1));
+  const a = kin * (1 - kout); if (a <= 0) return;
+  draw(a, (1 - kin) * 16 - kout * 14);
+}
+function sub(t, t0, t1, zh, en) {
+  slideText(t, t0, t1, (a, dy) => {
+    text(zh, W / 2, 948 + dy, { size: 46, weight: 700, alpha: a, spacing: 2 });
+    text(en, W / 2, 996 + dy, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+  });
+}
+function label(t, t0, t1, str) {
+  slideText(t, t0, t1, (a, dy) => {
+    text(str, W / 2, 74 + dy, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+    ctx.save(); ctx.globalAlpha *= a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92 + dy); ctx.lineTo(W / 2 + 40, 92 + dy); ctx.stroke(); ctx.restore();
+  });
+}
+
+// ---------- reusable drawings ----------
+function clockFace(x, y, R, hours, a = 1, glow = 0) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  if (glow > 0) { const g = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 1.6); g.addColorStop(0, `rgba(232,207,148,${0.18 * glow})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * 1.6, 0, 6.283); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(234,234,242,0.85)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.283); ctx.stroke();
+  for (let i = 0; i < 60; i++) { const an = i / 60 * 6.283, big = i % 5 === 0; ctx.strokeStyle = big ? 'rgba(234,234,242,0.9)' : 'rgba(234,234,242,0.3)'; ctx.lineWidth = big ? 5 : 2; ctx.beginPath(); ctx.moveTo(Math.cos(an) * (R - (big ? 26 : 12)), Math.sin(an) * (R - (big ? 26 : 12))); ctx.lineTo(Math.cos(an) * (R - 6), Math.sin(an) * (R - 6)); ctx.stroke(); }
+  const ha = (hours % 12) / 12 * 6.283 - Math.PI / 2, ma = (hours % 1) * 6.283 - Math.PI / 2;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = C.goldHi; ctx.lineWidth = 12; ctx.shadowColor = 'rgba(232,207,148,0.6)'; ctx.shadowBlur = 16;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ha) * R * 0.5, Math.sin(ha) * R * 0.5); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ma) * R * 0.78, Math.sin(ma) * R * 0.78); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.fillStyle = C.goldHi; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+function hhmm(h) { h = ((h % 24) + 24) % 24; const H = Math.floor(h), M = Math.floor((h - H) * 60); return String(H).padStart(2, '0') + ':' + String(M).padStart(2, '0'); }
+const BOWL = (() => { const p = new Path2D(); p.moveTo(-95, -140); p.bezierCurveTo(-100, -20, -60, 40, 0, 45); p.bezierCurveTo(60, 40, 100, -20, 95, -140); p.closePath(); return p; })();
+function glass(x, y, s, fill, t, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, s);
+  if (fill > 0.001) {
+    ctx.save(); ctx.clip(BOWL);
+    const top = lerp(45, -125, fill);
+    const g = ctx.createLinearGradient(0, top, 0, 45); g.addColorStop(0, 'rgba(244,190,90,0.95)'); g.addColorStop(1, 'rgba(176,100,30,0.95)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-120, 60);
+    for (let px = -120; px <= 120; px += 8) ctx.lineTo(px, top + 4 * Math.sin(px * 0.06 + t * 4));
+    ctx.lineTo(120, 60); ctx.closePath(); ctx.fill();
+    for (let i = 0; i < 7; i++) { const bx = -50 + i * 17, by = 40 - ((t * 60 + i * 37) % Math.max(10, 45 - top)); if (by > top + 6) { ctx.fillStyle = 'rgba(255,240,200,0.45)'; ctx.beginPath(); ctx.arc(bx, by, 2.5, 0, 6.283); ctx.fill(); } }
+    ctx.restore();
+  }
+  ctx.strokeStyle = 'rgba(234,234,242,0.9)'; ctx.lineWidth = 4; ctx.stroke(BOWL);
+  ctx.beginPath(); ctx.moveTo(0, 45); ctx.lineTo(0, 150); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0, 156, 72, 12, 0, 0, 6.283); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(-70, -115); ctx.quadraticCurveTo(-76, -45, -46, -2); ctx.stroke();
+  ctx.restore();
+}
+function card(x, y, w, h, a = 1, glow = 0.45) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = `rgba(232,207,148,${glow})`; ctx.shadowBlur = 36;
+  roundRect(x - w / 2, y - h / 2, w, h, 20); ctx.fillStyle = '#141414'; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(201,169,106,0.55)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+}
+function noteCard(x, y, w, big, small, rot, k, a = 1) {
+  if (k <= 0) return;
+  const drop = (1 - easeOut(Math.min(1, k))) * 260;
+  ctx.save(); ctx.globalAlpha *= a * Math.min(1, k * 3); ctx.translate(x, y - drop); ctx.rotate(rot);
+  ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+  roundRect(-w / 2, -110, w, 220, 8); ctx.fillStyle = '#EDE4D3'; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  text(big, 0, -6, { size: 40, weight: 700, color: '#2a2118' });
+  text(small, 0, 52, { size: 24, color: '#6b5a40' });
+  ctx.restore();
+}
+
+// ---------- background glue: a huge faint clock + a soft glow pulse on every scene change ----------
+function glue(t) {
+  ctx.save(); ctx.globalAlpha = 0.07; ctx.translate(W / 2, 540);
+  ctx.strokeStyle = '#EAEAF2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 520, 0, 6.283); ctx.stroke();
+  for (let i = 0; i < 12; i++) { const an = i / 12 * 6.283; ctx.beginPath(); ctx.moveTo(Math.cos(an) * 490, Math.sin(an) * 490); ctx.lineTo(Math.cos(an) * 520, Math.sin(an) * 520); ctx.stroke(); }
+  const an = t * 0.11 - Math.PI / 2; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(an) * 300, Math.sin(an) * 300); ctx.stroke();
+  ctx.restore();
+  let p = 0; Object.entries(S).forEach(([k, [s0]]) => { if (s0 > 0) p = Math.max(p, Math.exp(-Math.pow((t - s0) / 0.22, 2))); });
+  if (p > 0.01) { const g = ctx.createRadialGradient(W / 2, 470, 20, W / 2, 470, 900); g.addColorStop(0, `rgba(232,207,148,${0.13 * p})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- title (0–1 s): slams in on frame 0, flash, then pushes into the first scene ----------
+function sceneTitleCard(t) {
+  const [, d1] = S.D_title, kout = easeIO(prog(t, d1 - 0.2, d1 + 0.2));
+  if (kout >= 1) return;
+  const slam = easeOut(prog(t, 0, 0.28)), sc = lerp(1.18, 1, slam) * lerp(1, 0.92, kout);
+  ctx.save(); ctx.globalAlpha = 1 - kout; ctx.translate(W / 2, 500); ctx.scale(sc, sc);
+  clockFace(0, -20, 330, 7 + t * 2.5, 0.22, 1);
+  const g = ctx.createLinearGradient(-560, 0, 560, 0), sw = clamp(t / 0.8);
+  g.addColorStop(0, '#B8935A'); g.addColorStop(clamp(sw - 0.12), '#C9A96A'); g.addColorStop(sw, '#FFF0C8'); g.addColorStop(clamp(sw + 0.12), '#C9A96A'); g.addColorStop(1, '#B8935A');
+  ctx.font = `900 96px ${F.serif}`; ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36;
+  ctx.fillText('《熬一个通宵 ≈ 醉驾？》', 0, 0); ctx.shadowBlur = 0;
+  ctx.globalAlpha *= 0.6; ctx.strokeStyle = C.gold; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-220, 60); ctx.lineTo(220, 60); ctx.stroke(); ctx.globalAlpha /= 0.6;
+  text('睡眠剥夺 vs 酒精', 0, 126, { size: 40, weight: 700, spacing: 8 });
+  text('Sleep Deprivation vs. Alcohol', 0, 178, { size: 32, family: F.en, italic: true, color: C.gray });
+  ctx.restore();
+  const flash = Math.exp(-t / 0.09) * 0.55; if (flash > 0.01) { ctx.fillStyle = `rgba(255,240,210,${flash})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- A: the clock spins a whole day while the glass fills ----------
+function sceneA(lt) {
+  const k = easeIO(prog(lt, 0.05, b(3) - 0.15)), h = 7 + 24 * k;
+  clockFace(620, 450, 230, h, 1, 1);
+  text('清醒 ' + Math.floor(24 * k) + ' 小时', 620, 760, { size: 44, weight: 700, color: C.goldHi });
+  text(hhmm(h), 620, 270 - 30, { size: 30, color: C.gray, spacing: 4 });
+  glass(1300, 430, 1.35, 0.85 * k, lt);
+  const eq = easeBack(prog(lt, b(1.5), b(1.5) + 0.35));
+  text('≈', 960, 500, { size: 150, weight: 700, color: C.goldHi, alpha: clamp(eq) });
+}
+
+// ---------- B: everyday all-nighters ----------
+function iconBook() { ctx.strokeStyle = C.goldHi; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(0, -40); ctx.quadraticCurveTo(-40, -55, -75, -45); ctx.lineTo(-75, 45); ctx.quadraticCurveTo(-40, 35, 0, 50); ctx.quadraticCurveTo(40, 35, 75, 45); ctx.lineTo(75, -45); ctx.quadraticCurveTo(40, -55, 0, -40); ctx.lineTo(0, 50); ctx.stroke(); }
+function iconLaptop() { ctx.strokeStyle = C.goldHi; ctx.lineWidth = 5; roundRect(-65, -55, 130, 85, 8); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-90, 45); ctx.lineTo(90, 45); ctx.lineTo(75, 30); ctx.lineTo(-75, 30); ctx.closePath(); ctx.stroke(); ctx.fillStyle = 'rgba(232,207,148,0.25)'; ctx.fillRect(-55, -45, 110, 65); }
+function iconTv() { ctx.strokeStyle = C.goldHi; ctx.lineWidth = 5; roundRect(-75, -50, 150, 100, 12); ctx.stroke(); ctx.fillStyle = C.goldHi; ctx.beginPath(); ctx.moveTo(-15, -25); ctx.lineTo(25, 0); ctx.lineTo(-15, 25); ctx.closePath(); ctx.fill(); }
+function iconPad() { ctx.strokeStyle = C.goldHi; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(-80, -10); ctx.quadraticCurveTo(-80, -40, -45, -40); ctx.lineTo(45, -40); ctx.quadraticCurveTo(80, -40, 80, -10); ctx.lineTo(90, 30); ctx.quadraticCurveTo(95, 55, 65, 50); ctx.lineTo(40, 25); ctx.lineTo(-40, 25); ctx.lineTo(-65, 50); ctx.quadraticCurveTo(-95, 55, -90, 30); ctx.closePath(); ctx.stroke(); ctx.fillStyle = C.goldHi; ctx.fillRect(-55, -15, 30, 8); ctx.fillRect(-44, -26, 8, 30); [[40, -18], [55, -5]].forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 7, 0, 6.283); ctx.fill(); }); }
+function bolt() { ctx.fillStyle = C.goldHi; ctx.beginPath(); ctx.moveTo(10, -50); ctx.lineTo(-25, 8); ctx.lineTo(0, 8); ctx.lineTo(-10, 50); ctx.lineTo(28, -10); ctx.lineTo(3, -10); ctx.closePath(); ctx.fill(); }
+function target() { [44, 30, 16].forEach((r, i) => { ctx.strokeStyle = i === 2 ? C.goldHi : 'rgba(232,207,148,0.7)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(0, 0, r, 0, 6.283); ctx.stroke(); }); ctx.fillStyle = C.goldHi; ctx.beginPath(); ctx.arc(0, 0, 6, 0, 6.283); ctx.fill(); }
+function sunrise(t, rise, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a;
+  const hy = 780, sy = lerp(900, 760, rise);
+  const sky = ctx.createLinearGradient(0, 400, 0, hy); sky.addColorStop(0, 'rgba(0,0,0,0)'); sky.addColorStop(1, `rgba(232,140,60,${0.28 * rise})`);
+  ctx.fillStyle = sky; ctx.fillRect(0, 400, W, hy - 400);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, hy); ctx.clip();
+  for (let i = 0; i < 14; i++) { const an = Math.PI + (i + 0.5) / 14 * Math.PI + t * 0.05; ctx.strokeStyle = `rgba(245,214,150,${0.12 * rise})`; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(960 + Math.cos(an) * 170, sy + Math.sin(an) * 170); ctx.lineTo(960 + Math.cos(an) * 520, sy + Math.sin(an) * 520); ctx.stroke(); }
+  const g = ctx.createRadialGradient(960, sy, 20, 960, sy, 150); g.addColorStop(0, 'rgba(255,236,190,1)'); g.addColorStop(1, 'rgba(232,163,58,0.9)');
+  ctx.fillStyle = g; ctx.shadowColor = 'rgba(245,190,90,0.8)'; ctx.shadowBlur = 80; ctx.beginPath(); ctx.arc(960, sy, 140, 0, 6.283); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(234,234,242,0.35)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(160, hy); ctx.lineTo(1760, hy); ctx.stroke();
+  ctx.restore();
+}
+function key(x, y, rot, a) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(rot);
+  ctx.strokeStyle = C.goldHi; ctx.fillStyle = C.goldHi; ctx.lineWidth = 12; ctx.shadowColor = 'rgba(232,207,148,0.6)'; ctx.shadowBlur = 20;
+  ctx.beginPath(); ctx.arc(-110, 0, 48, 0, 6.283); ctx.stroke();
+  ctx.fillRect(-62, -9, 190, 18); ctx.fillRect(80, 9, 16, 30); ctx.fillRect(110, 9, 16, 22);
+  ctx.restore();
+}
+// ---------- shared characters & effects ----------
+function person(x, y, s, col = C.goldHi, rot = 0, a = 1) {   // (x, y) = feet
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -62, 17, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-27, 0); ctx.quadraticCurveTo(-29, -40, 0, -40); ctx.quadraticCurveTo(29, -40, 27, 0); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+const SPARKS = (() => { const r = mulberry32(97); return Array.from({ length: 28 }, () => ({ an: r() * 6.283, sp: 220 + r() * 520, s: 2 + r() * 4, red: r() < 0.5 })); })();
+function burst(x, y, age, scale = 1) {
+  if (age < 0 || age > 0.8) return;
+  SPARKS.forEach(p => {
+    const d = p.sp * scale * (age - 0.6 * age * age), a = 1 - age / 0.8;
+    ctx.fillStyle = p.red ? `rgba(224,85,74,${a})` : `rgba(245,214,150,${a})`;
+    ctx.beginPath(); ctx.arc(x + Math.cos(p.an) * d, y + Math.sin(p.an) * d, p.s * (1 - age), 0, 6.283); ctx.fill();
+  });
+}
+
+// ---------- B: four everyday all-nighters, 2 × 2, big cards ----------
+function sceneB(lt, t) {
+  [['考前通宵', iconBook, '03:00'], ['加班到天亮', iconLaptop, '05:30'], ['追剧到早上', iconTv, '06:10'], ['打游戏到天亮', iconPad, '06:45']].forEach(([lab, ic, tm], i) => {
+    const k = easeBack(prog(lt, b(0.1 + 0.8 * i), b(0.1 + 0.8 * i) + 0.45)); if (k <= 0) return;
+    const x = 960 + (i % 2 ? 300 : -300), y = (i < 2 ? 320 : 640) + 6 * Math.sin(t * 1.4 + i), ka = Math.min(1, k * 1.4), ks = clamp(k, 0, 1.2);
+    ctx.save(); ctx.translate(x, y); ctx.scale(ks, ks); ctx.translate(-x, -y);
+    card(x, y, 560, 280, ka);
+    ctx.save(); ctx.globalAlpha *= ka; ctx.translate(x - 165, y); ctx.scale(1.25, 1.25); ic(); ctx.restore();
+    text(lab, x - 45, y + 16, { size: 44, weight: 700, alpha: ka, align: 'left' });
+    text(tm, x + 250, y - 100, { size: 26, color: C.gray, align: 'right', alpha: ka });
+    ctx.restore();
+  });
+}
+
+// ---------- C: 1997 — the clock and the glass merge into the stamp ----------
+function sceneC(lt, t) {
+  const hit = lt - b(3), sw = easeBack(prog(lt, 0, 0.6)), shake = hit > 0 && hit < 0.5 ? 9 * Math.exp(-9 * hit) * Math.sin(70 * hit) : 0;
+  const PX = W / 2, PY = 450, rot = lerp(-0.32, -0.025, clamp(sw)) + 0.01 * Math.sin(t * 0.9);
+  ctx.save(); ctx.translate(PX + shake, PY + shake * 0.6); ctx.rotate(rot); ctx.scale(lerp(0.55, 1, clamp(sw)), 1);
+  const pw = 1000, ph = 520;
+  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24;
+  roundRect(-pw / 2, -ph / 2, pw, ph, 6);
+  const pg = ctx.createLinearGradient(0, -ph / 2, 0, ph / 2); pg.addColorStop(0, '#F1E9D8'); pg.addColorStop(1, '#E2D7C0');
+  ctx.fillStyle = pg; ctx.fill(); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  // light sweep across the paper
+  const sx = lerp(-900, 900, prog(lt, 0.5, 1.6));
+  ctx.save(); roundRect(-pw / 2, -ph / 2, pw, ph, 6); ctx.clip();
+  const lg = ctx.createLinearGradient(sx - 160, 0, sx + 160, 0); lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.55)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = lg; ctx.fillRect(-pw / 2, -ph / 2, pw, ph); ctx.restore();
+  ctx.strokeStyle = 'rgba(90,70,40,0.35)'; ctx.lineWidth = 2; roundRect(-pw / 2 + 22, -ph / 2 + 22, pw - 44, ph - 44, 2); ctx.stroke();
+  text('NATURE · 17 JULY 1997', 0, -ph / 2 + 92, { size: 22, color: '#6b5a40', spacing: 5 });
+  ctx.strokeStyle = 'rgba(90,70,40,0.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-300, -ph / 2 + 116); ctx.lineTo(300, -ph / 2 + 116); ctx.stroke();
+  text('Fatigue, alcohol and', 0, -48, { size: 68, family: F.en, italic: true, color: '#2a2118' });
+  text('performance impairment', 0, 40, { size: 68, family: F.en, italic: true, color: '#2a2118' });
+  text('D. Dawson · K. Reid', 0, 112, { size: 36, family: F.en, italic: true, color: '#4a3b28' });
+  text('Vol. 388 · p. 235', -430, ph / 2 - 52, { size: 20, color: '#7a6a50', spacing: 2, align: 'left' });
+  const k = prog(lt, b(3), b(3) + 0.2);
+  if (k > 0) {
+    ctx.save(); ctx.translate(310, 168); ctx.rotate(-0.22); const ss = lerp(2.6, 1, easeOut(k)); ctx.scale(ss, ss); ctx.globalAlpha *= Math.min(1, k * 4);
+    ctx.strokeStyle = C.red; ctx.lineWidth = 6; roundRect(-170, -56, 340, 112, 10); ctx.stroke(); ctx.lineWidth = 2; roundRect(-161, -47, 322, 94, 6); ctx.stroke();
+    text('疲劳 ≈ 酒精', 0, 20, { size: 56, family: F.serif, weight: 900, color: C.red, spacing: 3 }); ctx.restore();
+  }
+  ctx.restore();
+  // the opening's clock and glass fly in and merge into the stamp
+  const SX = PX + 310, SY = PY + 168, f = easeIO(prog(lt, b(1.6), b(3))), fa = prog(lt, b(1.4), b(1.7)) * (1 - prog(lt, b(2.85), b(3)));
+  if (fa > 0) {
+    clockFace(lerp(250, SX, f), lerp(260, SY, f) - 120 * Math.sin(f * Math.PI), lerp(70, 18, f), 7 + lt * 3, fa, 1);
+    glass(lerp(1700, SX, f), lerp(230, SY, f) - 120 * Math.sin(f * Math.PI), lerp(0.42, 0.1, f), 0.8, t, fa);
+  }
+  burst(SX, SY, hit, 1.1);
+  text('图为示意 · 标题与出处取自原文献', W / 2, 790, { size: 22, color: C.gray, alpha: 0.8, spacing: 2 });
+}
+
+// ---------- D: 2000 — 39 people, 28 hours awake, then the same people drink ----------
+function sceneD(lt, t) {
+  const p1 = easeIO(prog(lt, 0.3, b(3))), p2 = easeIO(prog(lt, b(3), b(5.6))), ph2 = prog(lt, b(2.8), b(3.2));
+  // the crowd: 39 = 3 rows × 13
+  for (let i = 0; i < 39; i++) {
+    const r = Math.floor(i / 13), c = i % 13, x = 960 + (c - 6) * 62 + (r % 2) * 14, y = 360 + r * 100;
+    const pop = easeBack(prog(lt, 0.05 + (Math.abs(c - 6) + r) * 0.03, 0.4 + (Math.abs(c - 6) + r) * 0.03)); if (pop <= 0) continue;
+    const tired = p1 * (1 - ph2 * 0.6), drunk = p2;
+    const rot = 0.18 * tired * Math.sin(t * 1.3 + i) * 0.6 + 0.28 * drunk * Math.sin(t * 2.4 + i * 0.7);
+    const col = `rgb(${Math.round(lerp(232, 130, tired * (1 - drunk)))},${Math.round(lerp(207, 130, tired * (1 - drunk)))},${Math.round(lerp(148, 140, tired * (1 - drunk)))})`;
+    person(x, y + 4 * tired * Math.sin(t * 1.1 + i), 0.75 * clamp(pop, 0, 1.2), col, rot);
+    if (drunk > 0.02) glass(x + 20, y - 92, 0.13, 0.85 * drunk, t + i, Math.min(1, drunk * 3));
+  }
+  // left: hours awake  |  right: blood alcohol
+  const la = 1 - 0.65 * ph2, ra = prog(lt, b(2.9), b(3.3));
+  text(String(Math.round(28 * p1)), 260, 470, { size: 150, weight: 700, color: C.goldHi, alpha: la });
+  text('小时不睡', 260, 540, { size: 32, color: C.gray, alpha: la });
+  text((0.1 * p2).toFixed(2) + '%', 1660, 470, { size: 96, weight: 700, color: AMBER, alpha: ra });
+  text('血液酒精', 1660, 540, { size: 32, color: C.gray, alpha: ra });
+  // tests pulse on the beat
+  const beatPulse = Math.exp(-Math.pow(((lt / BEAT) % 1) / 0.18, 2));
+  ctx.save(); ctx.globalAlpha *= 0.7 + 0.3 * beatPulse; ctx.translate(860, 700); ctx.scale(0.8 + 0.12 * beatPulse, 0.8 + 0.12 * beatPulse); bolt(); ctx.restore();
+  text('反应速度', 860, 775, { size: 26, color: C.gray });
+  ctx.save(); ctx.globalAlpha *= 0.7 + 0.3 * beatPulse; ctx.translate(1060, 700); ctx.scale(0.8, 0.8); target(); ctx.restore();
+  text('准确度', 1060, 775, { size: 26, color: C.gray });
+  text('39 人 · 30 名运输业员工 + 9 名军人', W / 2, 830, { size: 22, color: C.gray, alpha: 0.8, spacing: 1 });
+}
+
+// ---------- E: Tim stays up — night falls, the glass rises, the picture starts to double ----------
+const E_H = lt => lt < b(2.5) ? 18 * easeIO(prog(lt, 0.15, b(2.5))) : lt < b(6) ? 18 : 18 + 9 * easeIO(prog(lt, b(6), b(8.5)));
+const BAC = h => h <= 10 ? 0 : h <= 17 ? 0.05 * Math.pow((h - 10) / 7, 1.4) : h <= 19 ? 0.05 : 0.05 + 0.05 * clamp((h - 19) / 8);
+const STARS_E = (() => { const r = mulberry32(55); return Array.from({ length: 90 }, () => ({ x: r() * W, y: 120 + r() * 520, s: 1 + r() * 2.2, ph: r() * 6.28 })); })();
+function eWorld(lt, t, h, v, ox) {        // everything that "doubles" when drunk
+  const sway = 0.14 * (v / 0.1) * Math.sin(t * 2.2), bob = 5 * (v / 0.1) * Math.sin(t * 4.4);
+  clockFace(620 + ox, 285, 105, 7 + h, 1, 0.6);
+  person(620 + ox, 690 + bob, 2.7, C.goldHi, sway);
+  glass(1300 + ox, 450, 1.55, v / 0.12 * 0.95, t);
+}
+function sceneE(lt, t) {
+  const h = E_H(lt), v = BAC(h), night = clamp((h - 9) / 6) * (1 - clamp((h - 23) / 4) * 0.5);
+  // sky
+  const sky = ctx.createLinearGradient(0, 0, 0, 900); sky.addColorStop(0, `rgba(20,28,60,${0.55 * night})`); sky.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, 900);
+  STARS_E.forEach(s => { ctx.fillStyle = `rgba(230,230,255,${night * (0.35 + 0.35 * Math.sin(t * 2 + s.ph))})`; ctx.fillRect(s.x, s.y, s.s, s.s); });
+  ctx.save(); ctx.globalAlpha *= night; ctx.fillStyle = 'rgba(240,236,220,0.9)'; ctx.beginPath(); ctx.arc(1660, 210, 46, 0, 6.283); ctx.fill(); ctx.fillStyle = 'rgba(8,10,24,1)'; ctx.beginPath(); ctx.arc(1682, 196, 42, 0, 6.283); ctx.fill(); ctx.restore();
+  // double vision
+  const dv = clamp(v / 0.1);
+  if (dv > 0.05) { ctx.save(); ctx.globalAlpha *= 0.35 * dv; eWorld(lt, t, h, v, 22 * dv * Math.sin(t * 1.7)); ctx.restore(); }
+  eWorld(lt, t, h, v, 0);
+  text('Tim · 清醒 ' + Math.floor(h) + ' 小时', 620, 760, { size: 36, weight: 700, color: C.goldHi });
+  // glass scale marks
+  const gy = f => 450 + 1.55 * lerp(45, -125, f / 0.12 * 0.95);
+  [[0.05, '0.05%'], [0.1, '0.10%']].forEach(([f, s]) => { ctx.strokeStyle = 'rgba(234,234,242,0.55)'; ctx.lineWidth = 2; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(1150, gy(f)); ctx.lineTo(1455, gy(f)); ctx.stroke(); ctx.setLineDash([]); text(s, 1140, gy(f) + 8, { size: 26, color: C.gray, align: 'right' }); });
+  const pop = 1 + 0.18 * Math.exp(-Math.pow((lt - b(2.5)) / 0.12, 2)) + 0.18 * Math.exp(-Math.pow((lt - b(8.5)) / 0.12, 2));
+  ctx.save(); ctx.translate(1530, 470); ctx.scale(pop, pop); text(v.toFixed(2) + '%', 0, 0, { size: 92, weight: 700, color: v > 0.075 ? RED : C.goldHi, align: 'left' }); ctx.restore();
+  text('相当于的血液酒精', 1530, 525, { size: 26, color: C.gray, align: 'left' });
+  // a slim timeline along the bottom
+  const X0 = 360, X1 = 1560, Y = 850, tx = hh => X0 + (X1 - X0) * hh / 28;
+  ctx.strokeStyle = 'rgba(234,234,242,0.3)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(X0, Y); ctx.lineTo(X1, Y); ctx.stroke();
+  ctx.fillStyle = `rgba(232,207,148,${0.3 * prog(lt, b(1.6), b(2.2))})`; ctx.fillRect(tx(17), Y - 12, tx(19) - tx(17), 24);
+  [[0, '07:00'], [17, '00:00'], [19, '02:00'], [24, '次日 07:00'], [28, '11:00']].forEach(([hh, c]) => text(c, tx(hh), Y - 22, { size: 20, color: C.gray }));
+  ctx.strokeStyle = C.goldHi; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(X0, Y); ctx.lineTo(tx(h), Y); ctx.stroke();
+  glowDot(tx(h), Y, 8, 'rgba(245,214,150,0.98)', 4);
+  text('示意：按早上 7 点起床推算 · 只有 0.05% 和 0.1% 两个刻度来自 2000 年研究', W / 2, 150, { size: 22, color: C.gray, alpha: 0.75 });
+}
+
+// ---------- F: the breathalyser — 050, then 100 crosses the red line ----------
+function sceneF(lt, t) {
+  // 50 -> 80 creeps up with growing tension, hits 80 exactly on the drop (lt = 5 beats), then snaps to 100
+  const v1 = 50 * easeOut(prog(lt, b(0.5), b(2))), v2 = 30 * Math.pow(prog(lt, b(3.2), b(5)), 2.2) + 20 * easeOut(prog(lt, b(5), b(5.35)));
+  const val = Math.max(0, v1 + v2), col = val >= 80 ? RED : val >= 20 ? AMBER : C.goldHi;
+  const cross = Math.exp(-Math.pow((lt - b(5)) / 0.16, 2));
+  if (cross > 0.01) { ctx.fillStyle = `rgba(224,85,74,${0.22 * cross})`; ctx.fillRect(-100, -100, W + 200, H + 200); }
+  // device
+  const DX = 640, DY = 470, tilt = 0.05 * Math.sin(t * 0.8);
+  ctx.save(); ctx.translate(DX, DY); ctx.rotate(tilt);
+  ctx.fillStyle = 'rgba(234,234,242,0.85)'; roundRect(-22, -310, 44, 80, 10); ctx.fill();
+  ctx.shadowColor = `rgba(${val >= 80 ? '224,85,74' : '232,163,58'},0.45)`; ctx.shadowBlur = 50;
+  roundRect(-150, -240, 300, 480, 42); ctx.fillStyle = '#161616'; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(201,169,106,0.7)'; ctx.lineWidth = 3; ctx.stroke();
+  roundRect(-112, -175, 224, 140, 14); ctx.fillStyle = '#070907'; ctx.fill();
+  text(String(Math.round(val)).padStart(3, '0'), 0, -78, { size: 96, weight: 700, color: col, spacing: 6 });
+  text('mg/100mL', 0, -12, { size: 22, color: C.gray });
+  glowDot(0, 70, 20, val >= 80 ? 'rgba(224,85,74,0.95)' : val >= 20 ? 'rgba(232,163,58,0.95)' : 'rgba(150,150,160,0.6)', 3.2);
+  [[-60, 160], [0, 160], [60, 160]].forEach(([x, y]) => { ctx.fillStyle = 'rgba(234,234,242,0.18)'; ctx.beginPath(); ctx.arc(x, y, 16, 0, 6.283); ctx.fill(); });
+  ctx.restore();
+  // scale column with the zones
+  const BX = 1250, py = m => 760 - m / 120 * 500;
+  roundRect(BX, py(120), 64, 500, 14); ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fill();
+  ctx.fillStyle = 'rgba(232,163,58,0.35)'; ctx.fillRect(BX, py(80), 64, py(20) - py(80));
+  ctx.fillStyle = 'rgba(224,85,74,0.45)'; ctx.fillRect(BX, py(120), 64, py(80) - py(120));
+  ctx.strokeStyle = RED; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(BX - 16, py(80)); ctx.lineTo(BX + 80, py(80)); ctx.stroke();
+  [[0, '0'], [20, '20'], [80, '80'], [120, '120']].forEach(([m, s]) => text(s, BX + 90, py(m) + 9, { size: 26, color: C.gray, align: 'left' }));
+  text('饮酒后驾车', BX + 160, py(50) + 12, { size: 38, weight: 700, color: AMBER, align: 'left' });
+  text('醉酒驾车', BX + 160, py(100) + 12, { size: 38, weight: 700, color: RED, align: 'left' });
+  // marker riding the column
+  const my = py(Math.min(118, val));
+  ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 20; ctx.beginPath(); ctx.moveTo(BX - 8, my); ctx.lineTo(BX - 40, my - 18); ctx.lineTo(BX - 40, my + 18); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
+  const lab = lt < b(2.8) ? '熬到凌晨 ≈ 50' : '熬通宵 → 100';
+  text(lab, BX - 56, my + 13, { size: 36, weight: 700, color: col, align: 'right', alpha: prog(lt, b(0.6), b(1)) });
+  text('GB 19522—2024 · 血液酒精含量阈值', W / 2, 160, { size: 26, color: C.gray, alpha: 0.85 });
+  text('注：指测试成绩相当，不是法律上的醉驾认定', W / 2, 840, { size: 24, color: C.gray, alpha: 0.85 * prog(lt, b(5), b(5.4)) });
+}
+
+// ---------- G: crash risk as rows of cars ----------
+function carIcon(x, y, s, col, a = 1, glow = 0) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, s);
+  if (glow > 0) { ctx.shadowColor = `rgba(224,85,74,${glow})`; ctx.shadowBlur = 24; }
+  ctx.fillStyle = col; roundRect(-38, -6, 76, 22, 8); ctx.fill(); roundRect(-20, -24, 40, 20, 8); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = '#0a0a0a'; [-21, 21].forEach(wx => { ctx.beginPath(); ctx.arc(wx, 17, 8, 0, 6.283); ctx.fill(); }); ctx.strokeStyle = col; ctx.lineWidth = 3; [-21, 21].forEach(wx => { ctx.beginPath(); ctx.arc(wx, 17, 8, 0, 6.283); ctx.stroke(); });
+  ctx.fillStyle = 'rgba(255,240,180,0.9)'; ctx.beginPath(); ctx.arc(36, 2, 3.5, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+function sceneG(lt, t) {
+  const rows = [['睡满 7 小时', 1], ['6–7 小时', 1.3], ['5–6 小时', 1.9], ['4–5 小时', 4.3], ['不到 4 小时', 11.5]], X0 = 520, DX = 88;
+  text('前一天睡了多久 → 车祸风险（相对睡满 7 小时）', W / 2, 220, { size: 30, color: C.gray });
+  rows.forEach(([lab, v], i) => {
+    const st = b(0.3 + 1.3 * i), y = 300 + i * 100, last = i === 4, n = Math.ceil(v);
+    text(lab, X0 - 40, y + 12, { size: 32, align: 'right', alpha: prog(lt, st - 0.2, st + 0.1) });
+    const done = lt - (st + n * 0.06 + 0.25), shake = last && done > 0 ? 5 * Math.exp(-6 * done) * Math.sin(55 * done) : 0;
+    for (let j = 0; j < n; j++) {
+      const k = easeBack(prog(lt, st + j * 0.06, st + j * 0.06 + 0.25)); if (k <= 0) continue;
+      const frac = Math.min(1, v - j), x = X0 + 40 + j * DX + shake;
+      ctx.save(); if (frac < 1) { ctx.beginPath(); ctx.rect(x - 40, y - 40, 80 * frac, 80); ctx.clip(); }
+      carIcon(x, y, clamp(k, 0, 1.25), last ? RED : (i === 3 ? AMBER : C.goldHi), 1, last ? 0.8 : 0); ctx.restore();
+    }
+    const vk = prog(lt, st + n * 0.06, st + n * 0.06 + 0.2);
+    text('×' + String(v), X0 + 40 + (v - 0.5) * DX + 70 + shake, y + 16, { size: last ? 64 : 40, weight: 700, color: last ? RED : C.text, align: 'left', alpha: vk });
+    if (last) burst(X0 + 40 + 11 * DX, y, done, 0.7);
+  });
+  text('AAA 交通安全基金会 2016 · 4,571 起车祸 · 7,234 名司机', W / 2, 830, { size: 22, color: C.gray, alpha: 0.8 * prog(lt, 0.3, 0.7), spacing: 1 });
+}
+
+// ---------- I: the bedroom — keys into the tray, Tim dives into bed, blanket, lamp off, dawn in the window ----------
+const SKYLINE = (() => { const r = mulberry32(31); const out = []; let x = 0; while (x < 440) { const w = 26 + r() * 46; out.push([x, w, 40 + r() * 110]); x += w + 4; } return out; })();
+function bedroomWindow(x, y, w, h, dawn, t) {
+  ctx.save(); roundRect(x, y, w, h, 12); ctx.clip();
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, `rgb(${Math.round(lerp(10, 70, dawn))},${Math.round(lerp(14, 70, dawn))},${Math.round(lerp(38, 110, dawn))})`);
+  g.addColorStop(1, `rgb(${Math.round(lerp(18, 250, dawn))},${Math.round(lerp(22, 170, dawn))},${Math.round(lerp(48, 90, dawn))})`);
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  for (let i = 0; i < 26; i++) { const r = mulberry32(300 + i); ctx.fillStyle = `rgba(230,230,255,${(1 - dawn) * (0.4 + 0.4 * Math.sin(t * 2 + i))})`; ctx.fillRect(x + r() * w, y + r() * h * 0.6, 2, 2); }
+  const sx = x + w * 0.58, sy = lerp(y + h + 90, y + h * 0.58, dawn);
+  const sg = ctx.createRadialGradient(sx, sy, 8, sx, sy, 150); sg.addColorStop(0, 'rgba(255,244,210,1)'); sg.addColorStop(0.35, 'rgba(255,205,120,0.95)'); sg.addColorStop(1, 'rgba(255,150,60,0)');
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, 150, 0, 6.283); ctx.fill();
+  ctx.fillStyle = 'rgba(6,6,12,0.95)'; SKYLINE.forEach(([bx, bw, bh]) => ctx.fillRect(x + bx, y + h - bh * (h / 330), bw, bh * (h / 330)));
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(201,169,106,0.85)'; ctx.lineWidth = 10; roundRect(x, y, w, h, 12); ctx.stroke();
+  ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.moveTo(x, y + h * 0.5); ctx.lineTo(x + w, y + h * 0.5); ctx.stroke();
+}
+function sleepingHead(x, y, r, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a;
+  ctx.fillStyle = C.goldHi; ctx.shadowColor = 'rgba(232,207,148,0.5)'; ctx.shadowBlur = 18; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#3a2a10'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  [[-11, 2], [11, 2]].forEach(([ex, ey]) => { ctx.beginPath(); ctx.arc(x + ex, y + ey, 7, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); });
+  ctx.restore();
+}
+function sceneI(lt, t) {
+  const BX = 560, BW = 800, BY = 690;                 // mattress top-left & width
+  const WX = 1120, WY = 170, WW = 440, WH = 330;      // window
+  const LX = 400;                                     // bedside lamp / table
+  const dawn = easeIO(prog(lt, b(1.2), b(4.8)));
+  const lamp = 1 - easeIO(prog(lt, b(2.55), b(2.55) + 0.35));
+  const zk = easeIO(prog(lt, b(4.05), b(5) + 0.15));  // push into the window at the end
+  const zc = [WX + WW / 2, WY + WH * 0.62];
+  ctx.save(); ctx.translate(zc[0], zc[1]); ctx.scale(1 + 3.2 * zk, 1 + 3.2 * zk); ctx.translate(-zc[0], -zc[1]);
+  // warm lamp light on the wall, then darkness
+  const lg = ctx.createRadialGradient(LX, 520, 20, LX, 520, 900); lg.addColorStop(0, `rgba(255,190,110,${0.30 * lamp})`); lg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = lg; ctx.fillRect(-200, -200, W + 400, H + 400);
+  // dawn light spilling from the window
+  const dg = ctx.createRadialGradient(zc[0], zc[1], 40, zc[0], zc[1] + 200, 900); dg.addColorStop(0, `rgba(255,180,90,${0.22 * dawn})`); dg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = dg; ctx.fillRect(-200, -200, W + 400, H + 400);
+  bedroomWindow(WX, WY, WW, WH, dawn, t);
+  // floor
+  ctx.strokeStyle = 'rgba(234,234,242,0.18)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(120, 800); ctx.lineTo(1800, 800); ctx.stroke();
+  // bedside table + lamp + key tray
+  ctx.fillStyle = '#171717'; roundRect(LX - 85, 640, 170, 160, 10); ctx.fill(); ctx.strokeStyle = 'rgba(201,169,106,0.55)'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = 'rgba(201,169,106,0.7)'; ctx.fillRect(LX - 4, 520, 8, 120); roundRect(LX - 40, 630, 80, 12, 6); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.moveTo(LX - 70, 525); ctx.lineTo(LX + 70, 525); ctx.lineTo(LX + 45, 440); ctx.lineTo(LX - 45, 440); ctx.closePath();
+  ctx.fillStyle = `rgb(${Math.round(lerp(60, 245, lamp))},${Math.round(lerp(52, 205, lamp))},${Math.round(lerp(40, 140, lamp))})`; if (lamp > 0.05) { ctx.shadowColor = `rgba(255,200,120,${0.9 * lamp})`; ctx.shadowBlur = 60; } ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#222'; roundRect(LX + 20, 628, 60, 12, 6); ctx.fill();
+  const kf = prog(lt, 0.1, b(1)), ky = lerp(250, 610, easeOut(kf)) - (kf >= 1 ? 0 : 0), kb = kf >= 1 ? 10 * Math.exp(-10 * (lt - b(1))) * Math.abs(Math.sin(28 * (lt - b(1)))) : 0;
+  ctx.save(); ctx.translate(LX + 50, ky - kb); ctx.scale(0.38, 0.38); key(0, 0, lerp(-1.2, 0.15, easeOut(kf)), 1); ctx.restore();
+  // bed
+  ctx.fillStyle = '#1c1c1c'; roundRect(BX - 30, BY - 190, 46, 300, 16); ctx.fill(); ctx.strokeStyle = 'rgba(201,169,106,0.6)'; ctx.lineWidth = 3; ctx.stroke();
+  roundRect(BX, BY, BW, 64, 18); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(201,169,106,0.55)'; ctx.fillRect(BX + 6, BY + 64, 14, 46); ctx.fillRect(BX + BW - 20, BY + 64, 14, 46);
+  ctx.fillStyle = '#EDE4D3'; roundRect(BX + 24, BY - 50, 170, 54, 26); ctx.fill();
+  // Tim: runs in from the right, dives (rotating) onto the bed
+  const jk = easeIO(prog(lt, b(1.0), b(1.85))), landed = lt >= b(1.85);
+  const hop = 6 * Math.abs(Math.sin(t * 9)) * (1 - prog(lt, b(0.9), b(1.0)));
+  if (!landed) person(lerp(1680, BX + 330, jk), lerp(800 - hop, BY - 4, jk) - 300 * Math.sin(jk * Math.PI), 1.55, C.goldHi, lerp(0, -Math.PI / 2, easeIO(prog(jk, 0.25, 1))), 1 - prog(lt, b(1.75), b(1.85)));
+  // blanket drops over him, then breathes
+  const bk = easeBack(prog(lt, b(1.8), b(2.45))), breath = lt > b(2.45) ? 5 * Math.sin((lt - b(2.45)) * 2.6) : 0;
+  if (bk > 0) {
+    const top = BY - 58 - breath, drop = (1 - clamp(bk)) * -240;
+    ctx.save(); ctx.translate(0, drop); ctx.globalAlpha *= clamp(bk * 2);
+    const bg = ctx.createLinearGradient(0, top, 0, BY + 40); bg.addColorStop(0, '#E8CF94'); bg.addColorStop(1, '#9c7a40');
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.moveTo(BX + 175, BY + 40); ctx.lineTo(BX + 175, top + 22);
+    ctx.bezierCurveTo(BX + 260, top - 20, BX + 380, top - 6, BX + 470, top + 8); ctx.bezierCurveTo(BX + 600, top + 26, BX + 720, top + 4, BX + BW + 14, top + 30);
+    ctx.lineTo(BX + BW + 18, BY + 52); ctx.quadraticCurveTo(BX + 480, BY + 70, BX + 175, BY + 40); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(90,60,20,0.35)'; ctx.lineWidth = 3; [300, 460, 620].forEach(fx => { ctx.beginPath(); ctx.moveTo(BX + fx, top + 14); ctx.quadraticCurveTo(BX + fx + 20, top + 50, BX + fx - 6, BY + 40); ctx.stroke(); });
+    ctx.restore();
+  }
+  sleepingHead(BX + 120, BY - 38 - breath * 0.3, 32, prog(lt, b(1.8), b(1.95)));
+  // the room goes dark when the lamp clicks off (the window stays bright)
+  ctx.fillStyle = `rgba(0,0,0,${0.35 * (1 - lamp)})`; ctx.fillRect(-200, -200, WX + 200, H + 400); ctx.fillRect(WX + WW, -200, W, H + 400); ctx.fillRect(WX, -200, WW, WY + 200); ctx.fillRect(WX, WY + WH, WW, H);
+  // Z z z — rising in a slow curve from the pillow
+  for (let i = 0; i < 6; i++) {
+    const st = b(2.8) + i * b(0.5), ph = (lt - st) / 1.9; if (ph < 0 || ph > 1) continue;
+    const zx = BX + 150 + ph * 230 + 22 * Math.sin(ph * 5 + i), zy = BY - 110 - ph * 300;
+    ctx.save(); ctx.translate(zx, zy); ctx.rotate(-0.2 + 0.25 * Math.sin(ph * 4 + i)); ctx.shadowColor = 'rgba(232,207,148,0.7)'; ctx.shadowBlur = 16;
+    text(i % 2 ? 'z' : 'Z', 0, 0, { size: 44 + 46 * ph, family: F.serif, weight: 900, color: C.goldHi, alpha: Math.sin(ph * Math.PI) * 0.95 }); ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------- J: closing question ----------
+function sceneJ(lt, t) {
+  sunrise(t, 1, 0.25);
+  const bk = ctx.createRadialGradient(960, 560, 40, 960, 560, 560); bk.addColorStop(0, 'rgba(0,0,0,0.7)'); bk.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = bk; ctx.fillRect(300, 250, 1320, 620);
+  dust(t, 0.9);
+  const sg = easeBack(prog(lt, 0, 0.4));
+  glowDot(960, 330, 16 * Math.max(0.01, sg), 'rgba(245,214,150,0.98)', 6);
+  text('你上一次熬通宵，', 960, 500, { size: 84, weight: 700, alpha: prog(lt, 0.1, 0.45) });
+  text('是为了什么？', 960, 610, { size: 84, weight: 700, color: C.goldHi, alpha: prog(lt, 0.3, 0.65) });
+  text('What did you last stay up all night for?', 960, 684, { size: 36, family: F.en, italic: true, color: C.gray, alpha: prog(lt, 0.55, 0.9) });
+}
+
+// ---------- compose ----------
+function render(t, frame = Math.round(t * TL.fps)) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  background(t, frame);
+  glue(t);
+  dust(t, 0.45);
+  sceneTitleCard(t);
+  scene(t, 'A_hook', sceneA);
+  scene(t, 'B_daily', lt => sceneB(lt, t));
+  scene(t, 'C_1997', lt => sceneC(lt, t), { fi: 0.8, fo: 0.8 });
+  scene(t, 'D_2000', lt => sceneD(lt, t));
+  scene(t, 'E_convert', lt => sceneE(lt, t));
+  scene(t, 'F_standard', lt => sceneF(lt, t));
+  scene(t, 'G_crash', lt => sceneG(lt, t));
+  scene(t, 'I_landing', lt => sceneI(lt, t), { zout: 1, fo: 0.6 });
+  scene(t, 'J_end', lt => sceneJ(lt, t), { zin: 1, fi: 0.6 });
+  const L = (k, s) => label(t, S[k][0], S[k][1], s);
+  L('A_hook', '清 醒  vs  酒 精'); L('B_daily', '你 熬 过 吗'); L('C_1997', '1997 · 自 然'); L('D_2000', '2000 · 实 验');
+  L('E_convert', '换 算'); L('F_standard', '对 照 国 标'); L('G_crash', '车 祸 风 险');
+  const s = (k, o, n, zh, en) => sub(t, S[k][0] + b(o), S[k][0] + b(o + n), zh, en);
+  s('A_hook', 0, 3, '熬一个通宵，大脑相当于喝了多少酒？', 'After an all-nighter, how drunk is your brain?');
+  s('B_daily', 0, 4, '考前通宵、加班到天亮、打游戏到早上……', 'Cramming, overtime, gaming till dawn…');
+  s('C_1997', 0, 5, '1997 年，《自然》上的一篇研究，把熬夜和喝酒放在一起比', 'In 1997, a paper in Nature put sleeplessness and alcohol side by side.');
+  s('D_2000', 0, 3, '2000 年，39 个人连续 28 小时不睡，一边做测试', 'In 2000, 39 people stayed awake for 28 hours, taking tests.');
+  s('D_2000', 3, 3, '同一批人另做喝酒测试，最高喝到血液酒精 0.1%', 'The same people also drank — up to 0.1% blood alcohol.');
+  s('E_convert', 0, 3, '清醒 17 到 19 小时，测试成绩就相当于酒精 0.05%', 'After 17–19 hours awake: like 0.05% blood alcohol.');
+  s('E_convert', 3, 3, '早上 7 点起床，熬到凌晨 0 到 2 点，就到了', "Up at 7 a.m.? That's midnight to 2 a.m.");
+  s('E_convert', 6, 3, '再熬下去，掉到了实验里的最高酒精量 0.1%', 'Stay up longer and it falls to the 0.1% level.');
+  s('F_standard', 0, 3, '换成中国国标：0.05% 就是 50 毫克，已经算「饮酒驾车」', 'In Chinese standards, 0.05% = 50 mg: drink-driving.');
+  s('F_standard', 3, 3, '0.1% 就是 100 毫克，越过了醉驾线 80', '0.1% = 100 mg — over the drunk-driving line of 80.');
+  s('G_crash', 0, 4, '2016 年，美国分析了 4571 起车祸里的 7234 名司机', 'In 2016, a US study looked at 7,234 drivers in 4,571 crashes.');
+  s('G_crash', 4, 4, '前一天睡不到 4 小时，车祸风险是 11.5 倍', 'Under 4 hours of sleep: 11.5 times the crash risk.');
+  s('I_landing', 0, 3, '通宵之后，请把车钥匙交出去', 'After an all-nighter, hand over the keys.');
+  s('I_landing', 3, 2, '睡眠，没有替代品', 'There is no substitute for sleep.');
+  finish(t, frame);
+}
+
+// all strings drawn, so every font subset is loaded before frame 0
+window.ALL_TEXT = document.documentElement.innerHTML;
+window.ready = (async () => {
+  const sample = window.ALL_TEXT;
+  await Promise.all([
+    document.fonts.load(`900 92px ${F.serif}`, sample),
+    document.fonts.load(`400 40px ${F.sans}`, sample),
+    document.fonts.load(`700 40px ${F.sans}`, sample),
+    document.fonts.load(`italic 400 30px ${F.en}`, sample),
+  ]);
+  await document.fonts.ready;
+  return { duration: DURATION, frames: Math.ceil(DURATION * TL.fps) };
+})();
+window.render = render;
+</script>
+</body>
+</html>
