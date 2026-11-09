@@ -66,6 +66,13 @@ for (fx, fy, fc, fb) in FIX:
     if len(vals) == 0: print('FIX found no region near', fx, fy); continue
     r_ = np.bincount(vals).argmax()
     cls_of[r_] = fc; bloom_of[r_] = fb
+import os
+mpath = os.path.join(os.path.dirname(src) or '.', 'orn_mask.png')
+if os.path.exists(mpath):      # bowl ornament (leaves, dots, pearls) -> accent class
+    om = np.asarray(Image.open(mpath)) > 0
+    cnt = ndi.sum(om, lab, idx); frac = cnt / np.maximum(area, 1)
+    for r in range(1, n + 1):
+        if frac[r] > 0.35 and cls_of[r] in (VASE_W, VASE_B): cls_of[r] = VASE_B
 clsmap = cls_of[lab]
 bloommap = bloom_of[lab]
 
