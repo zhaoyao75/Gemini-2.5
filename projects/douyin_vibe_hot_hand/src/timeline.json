@@ -1,0 +1,268 @@
+{
+ "fps": 30,
+ "bpm": 77,
+ "intro_seconds": 1.0,
+ "total_beats": 70,
+ "tail_seconds": 0.5,
+ "scenes_beats": {
+  "D_title": [
+   0,
+   4
+  ],
+  "A_hook": [
+   4,
+   7
+  ],
+  "B_belief": [
+   7,
+   10
+  ],
+  "C_1985": [
+   10,
+   16
+  ],
+  "D_impact": [
+   16,
+   20
+  ],
+  "E_twist": [
+   20,
+   24
+  ],
+  "F1_rules": [
+   24,
+   28
+  ],
+  "F2_table": [
+   28,
+   36
+  ],
+  "F3_avg": [
+   36,
+   40
+  ],
+  "G_sim": [
+   40,
+   46
+  ],
+  "H_correct": [
+   46,
+   52
+  ],
+  "I_benchmark": [
+   52,
+   56
+  ],
+  "J_caveat": [
+   56,
+   61
+  ],
+  "K_landing": [
+   61,
+   66
+  ],
+  "L_end": [
+   66,
+   70
+  ]
+ },
+ "sfx_beats": [
+  {
+   "beat": 0.02,
+   "type": "ding"
+  },
+  {
+   "beat": 4.3,
+   "type": "tick"
+  },
+  {
+   "beat": 5.0,
+   "type": "tick"
+  },
+  {
+   "beat": 5.7,
+   "type": "tick"
+  },
+  {
+   "beat": 7.2,
+   "type": "tick"
+  },
+  {
+   "beat": 7.6,
+   "type": "tick"
+  },
+  {
+   "beat": 8.0,
+   "type": "tick"
+  },
+  {
+   "beat": 8.4,
+   "type": "tick"
+  },
+  {
+   "beat": 8.8,
+   "type": "tick"
+  },
+  {
+   "beat": 10,
+   "type": "whoosh"
+  },
+  {
+   "beat": 13,
+   "type": "thud"
+  },
+  {
+   "beat": 16.2,
+   "type": "tick"
+  },
+  {
+   "beat": 17.2,
+   "type": "tick"
+  },
+  {
+   "beat": 18.2,
+   "type": "tick"
+  },
+  {
+   "beat": 20,
+   "type": "swell"
+  },
+  {
+   "beat": 22.2,
+   "type": "thud"
+  },
+  {
+   "beat": 24.3,
+   "type": "tick"
+  },
+  {
+   "beat": 25.3,
+   "type": "tick"
+  },
+  {
+   "beat": 26.3,
+   "type": "tick"
+  },
+  {
+   "beat": 28,
+   "type": "tick"
+  },
+  {
+   "beat": 29,
+   "type": "tick"
+  },
+  {
+   "beat": 30,
+   "type": "tick"
+  },
+  {
+   "beat": 31,
+   "type": "tick"
+  },
+  {
+   "beat": 32,
+   "type": "tick"
+  },
+  {
+   "beat": 33,
+   "type": "tick"
+  },
+  {
+   "beat": 34,
+   "type": "tick"
+  },
+  {
+   "beat": 35,
+   "type": "tick"
+  },
+  {
+   "beat": 36.2,
+   "type": "tick"
+  },
+  {
+   "beat": 37.7,
+   "type": "ding"
+  },
+  {
+   "beat": 40.0,
+   "type": "pop"
+  },
+  {
+   "beat": 40.5,
+   "type": "pop"
+  },
+  {
+   "beat": 41.0,
+   "type": "pop"
+  },
+  {
+   "beat": 41.5,
+   "type": "pop"
+  },
+  {
+   "beat": 42.0,
+   "type": "pop"
+  },
+  {
+   "beat": 42.5,
+   "type": "pop"
+  },
+  {
+   "beat": 43,
+   "type": "tick"
+  },
+  {
+   "beat": 43.8,
+   "type": "tick"
+  },
+  {
+   "beat": 46.3,
+   "type": "tick"
+  },
+  {
+   "beat": 49.2,
+   "type": "tick"
+  },
+  {
+   "beat": 51.2,
+   "type": "ding"
+  },
+  {
+   "beat": 52.3,
+   "type": "tick"
+  },
+  {
+   "beat": 53.5,
+   "type": "tick"
+  },
+  {
+   "beat": 56.3,
+   "type": "pop"
+  },
+  {
+   "beat": 57.3,
+   "type": "pop"
+  },
+  {
+   "beat": 58.3,
+   "type": "pop"
+  },
+  {
+   "beat": 61.3,
+   "type": "tick"
+  },
+  {
+   "beat": 62.0,
+   "type": "tick"
+  },
+  {
+   "beat": 62.7,
+   "type": "tick"
+  },
+  {
+   "beat": 66,
+   "type": "ding"
+  }
+ ],
+ "watermark": "@比特双子"
+}
