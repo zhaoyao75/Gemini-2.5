@@ -1,0 +1,182 @@
+{
+ "schema": "ppt-master.fact-provenance.v1",
+ "topic": "抖音 #vibe知识大赏 爆款短视频内容特点",
+ "facts": [
+  {
+   "fact_id": "F001",
+   "claim": "用 AI 编程工具写代码生成 HTML/Canvas 科普动画并渲染成视频",
+   "source_title": "抖音 Vibe知识大赏是什么？活动规则、爆款套路与开源制作工具汇总（2026）",
+   "source_url": "https://xtxian.com/ai-video/opus-video/vibe-zhishi-dashang",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F002",
+   "claim": "抖音运营 9 月 29 日起私信邀约中小科技博主参加活动",
+   "source_title": "新人半月涨粉60万，抖音、B站、小红书抢跑“Vibe知识”赛道 - DoNews",
+   "source_url": "https://www.donews.com/article/detail/8872/108568.html",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F003",
+   "claim": "截至 2026-10-20 抖音话题约 5.1 万人参与、11.7 亿播放；小红书 6.6 亿浏览",
+   "source_title": "新人半月涨粉60万，抖音、B站、小红书抢跑“Vibe知识”赛道 - DoNews",
+   "source_url": "https://www.donews.com/article/detail/8872/108568.html",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F004",
+   "claim": "第三方整理：征稿截止 10 月 31 日，标题以「Vibe知识大赏」开头并带话题（非官方原文）",
+   "source_title": "抖音 Vibe知识大赏是什么？活动规则、爆款套路与开源制作工具汇总（2026）",
+   "source_url": "https://xtxian.com/ai-video/opus-video/vibe-zhishi-dashang",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F005",
+   "claim": "小红书创作者统计 51 条爆款中约一半来自粉丝不足 1500 的账号",
+   "source_title": "新人半月涨粉60万，抖音、B站、小红书抢跑“Vibe知识”赛道 - DoNews",
+   "source_url": "https://www.donews.com/article/detail/8872/108568.html",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F006",
+   "claim": "比特新语 20 天近 78 万粉；《银牌的眼泪》约 361 万播放、《光遗传学到底是什么》约 306 万播放",
+   "source_title": "新人半月涨粉60万，抖音、B站、小红书抢跑“Vibe知识”赛道 - DoNews",
+   "source_url": "https://www.donews.com/article/detail/8872/108568.html",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F007",
+   "claim": "电子智人 11 条作品 144.6 万赞，《信息论》约 137 万赞",
+   "source_title": "新人半月涨粉60万，抖音、B站、小红书抢跑“Vibe知识”赛道 - DoNews",
+   "source_url": "https://www.donews.com/article/detail/8872/108568.html",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F008",
+   "claim": "叁号暗房 Logos 34 条作品、21.2 万粉、280 万赞",
+   "source_title": "20 天涨粉 78 万！全网爆火的「Vibe知识大赏」保姆级教程",
+   "source_url": "https://www.jxxy.net/ai/articles/vibe-knowledge-showcase-guide/",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F009",
+   "claim": "Iwanau、Juno、叁号暗房 8 条原片被逆向为风格样本",
+   "source_title": "xiazhuo123456789/vibe-knowledge-video（8 条爆款原片逆向风格规范）",
+   "source_url": "https://github.com/xiazhuo123456789/vibe-knowledge-video",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F010",
+   "claim": "墨点实验室《同样带头鼓掌，为什么结果差这么多》3 天点赞超 4 万",
+   "source_title": "新人半月涨粉60万，抖音、B站、小红书抢跑“Vibe知识”赛道 - DoNews",
+   "source_url": "https://www.donews.com/article/detail/8872/108568.html",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F011",
+   "claim": "爆款选题两类：硬核热点、反直觉冷知识；情绪痛点与系列化表现好",
+   "source_title": "20 天涨粉 78 万！全网爆火的「Vibe知识大赏」保姆级教程",
+   "source_url": "https://www.jxxy.net/ai/articles/vibe-knowledge-showcase-guide/",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F012",
+   "claim": "选题公式：硬知识+私人相关、具体年份开路、反直觉结论做锚",
+   "source_title": "xiazhuo123456789/vibe-knowledge-video（8 条爆款原片逆向风格规范）",
+   "source_url": "https://github.com/xiazhuo123456789/vibe-knowledge-video",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F013",
+   "claim": "开头 2 秒出画面大字；中段每 10-15 秒一个转折；可做 60 秒竖屏",
+   "source_title": "20 天涨粉 78 万！全网爆火的「Vibe知识大赏」保姆级教程",
+   "source_url": "https://www.jxxy.net/ai/articles/vibe-knowledge-showcase-guide/",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F014",
+   "claim": "结尾开放式互动问题",
+   "source_title": "xiazhuo123456789/vibe-knowledge-video（8 条爆款原片逆向风格规范）",
+   "source_url": "https://github.com/xiazhuo123456789/vibe-knowledge-video",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F015",
+   "claim": "1920×1080 30fps、119-166 秒、无旁白、76-78 BPM 器乐 BGM",
+   "source_title": "xiazhuo123456789/vibe-knowledge-video（8 条爆款原片逆向风格规范）",
+   "source_url": "https://github.com/xiazhuo123456789/vibe-knowledge-video",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F016",
+   "claim": "深蓝黑底、金/暖橙强调、五区版式、双语字幕",
+   "source_title": "xiazhuo123456789/vibe-knowledge-video（8 条爆款原片逆向风格规范）",
+   "source_url": "https://github.com/xiazhuo123456789/vibe-knowledge-video",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F017",
+   "claim": "静止秒数 <25%、内容长出来式转场、极少黑场",
+   "source_title": "xiazhuo123456789/vibe-knowledge-video（8 条爆款原片逆向风格规范）",
+   "source_url": "https://github.com/xiazhuo123456789/vibe-knowledge-video",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F018",
+   "claim": "字幕所述须在画面出现；缺出处易被评论区质疑",
+   "source_title": "抖音 Vibe知识大赏是什么？活动规则、爆款套路与开源制作工具汇总（2026）",
+   "source_url": "https://xtxian.com/ai-video/opus-video/vibe-zhishi-dashang",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F019",
+   "claim": "文献复原标注示意、结尾声明与学术引用",
+   "source_title": "xiazhuo123456789/vibe-knowledge-video（8 条爆款原片逆向风格规范）",
+   "source_url": "https://github.com/xiazhuo123456789/vibe-knowledge-video",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F020",
+   "claim": "Canvas + Playwright 逐帧 + ffmpeg 流程；画面由 t 决定；先出样片",
+   "source_title": "20 天涨粉 78 万！全网爆火的「Vibe知识大赏」保姆级教程",
+   "source_url": "https://www.jxxy.net/ai/articles/vibe-knowledge-showcase-guide/",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F021",
+   "claim": "多个 MIT 开源 Skill，部分参考文件版权归原作者",
+   "source_title": "抖音 Vibe知识大赏是什么？活动规则、爆款套路与开源制作工具汇总（2026）",
+   "source_url": "https://xtxian.com/ai-video/opus-video/vibe-zhishi-dashang",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  },
+  {
+   "fact_id": "F022",
+   "claim": "同质化：模型味画面、选题撞车，窗口期可能很短",
+   "source_title": "新人半月涨粉60万，抖音、B站、小红书抢跑“Vibe知识”赛道 - DoNews",
+   "source_url": "https://www.donews.com/article/detail/8872/108568.html",
+   "classification": "external",
+   "retrieved_at": "2026-11-08"
+  }
+ ]
+}
