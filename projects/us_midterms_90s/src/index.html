@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>美国中期选举一次看懂</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-serif-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/eb-garamond/400-italic.css">
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Every frame is a pure function of time t (seconds). No requestAnimationFrame,
+// no Date, no unseeded randomness — so frame-by-frame rendering is repeatable.
+const TL = window.TL;                 // injected by render.js from timeline.json
+const BEAT = 60 / TL.bpm;
+const b = n => n * BEAT;              // beat index -> seconds
+// The title card lasts INTRO seconds; beat n >= TB is placed INTRO + (n - TB) beats into the video.
+const INTRO = TL.intro_seconds, TB = TL.scenes_beats.D_title[1];
+const T = n => n < TB ? n / TB * INTRO : INTRO + (n - TB) * BEAT;
+const S = Object.fromEntries(Object.entries(TL.scenes_beats).map(([k, [s, e]]) => [k, [T(s), T(e)]]));
+const DURATION = T(TL.total_beats) + TL.tail_seconds;
+
+const W = 1920, H = 1080;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---------- palette & fonts ----------
+const C = {
+  bgIn: '#0e0e0e', bgOut: '#000000',
+  text: '#EAEAF2', gray: '#8E8E93', gold: '#C9A96A', goldHi: '#E8CF94',
+  paper: '#EDE4D3', red: '#B53A2F',
+};
+const F = {
+  serif: '"Noto Serif SC"',
+  sans: '"Noto Sans SC"',
+  en: '"EB Garamond"',
+};
+
+// ---------- math helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const easeIO = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// fade in over fi, hold, fade out over fo, inside [t0, t1]
+const window01 = (t, t0, t1, fi = 0.4, fo = 0.35) => Math.min(prog(t, t0, t0 + fi), 1 - prog(t, t1 - fo, t1));
+
+// ---------- static random fields (seeded) ----------
+const STARS = (() => { const r = mulberry32(7); return Array.from({ length: 220 }, () => ({ x: r() * W, y: r() * H, s: 0.4 + r() * 1.3, ph: r() * 6.28, sp: 0.4 + r() * 1.2 })); })();
+const DUST = (() => { const r = mulberry32(11); return Array.from({ length: 46 }, () => ({ x: r() * W, y: r() * H, s: 0.8 + r() * 2.2, vx: (r() - .5) * 14, vy: -6 - r() * 16, ph: r() * 6.28 })); })();
+
+// ---------- text helpers ----------
+function text(str, x, y, { size = 40, family = F.sans, weight = 400, color = C.text, align = 'center', alpha = 1, italic = false, spacing = 0, baseline = 'alphabetic' } = {}) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${family}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  ctx.letterSpacing = spacing + 'px';
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// Bilingual subtitle band at 85–91% height
+function subtitle(t, t0, t1, zh, en) {
+  const a = window01(t, t0, t1);
+  if (a <= 0) return;
+  const rise = (1 - easeOut(prog(t, t0, t0 + 0.4))) * 8;
+  text(zh, W / 2, 948 + rise, { size: 46, weight: 700, alpha: a, spacing: 2 });
+  text(en, W / 2, 996 + rise, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+}
+
+// Small note band at ~70% height
+function note(t, t0, t1, str, x = W / 2, y = 790) {
+  const a = window01(t, t0, t1, 0.35, 0.3);
+  text(str, x, y, { size: 24, color: C.gray, alpha: a, spacing: 1 });
+}
+
+function topLabel(t, t0, t1, str) {
+  const a = window01(t, t0, t1, 0.5, 0.4);
+  if (a <= 0) return;
+  text(str, W / 2, 74, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+  ctx.save(); ctx.globalAlpha = a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92); ctx.lineTo(W / 2 + 40, 92); ctx.stroke(); ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function heart(x, y, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, 3);
+  ctx.bezierCurveTo(-7, -3, -4, -9, 0, -5); ctx.bezierCurveTo(4, -9, 7, -3, 0, 3);
+  ctx.fill(); ctx.restore();
+}
+
+function glowDot(x, y, r, color, glow, alpha = 1) {
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * glow);
+  g.addColorStop(0, color); g.addColorStop(0.25, color.replace(/[\d.]+\)$/, '0.35)')); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * glow, 0, 6.283); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- background ----------
+function background(t, frame) {
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, 80, W / 2, H * 0.5, W * 0.7);
+  g.addColorStop(0, C.bgIn); g.addColorStop(1, C.bgOut);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of STARS) {
+    const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * s.sp + s.ph));
+    ctx.fillStyle = `rgba(220,220,240,${a})`;
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+}
+function dust(t, alpha = 1) {
+  for (const d of DUST) {
+    const x = ((d.x + d.vx * t) % W + W) % W;
+    const y = ((d.y + d.vy * t) % H + H) % H;
+    const a = alpha * (0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.3 + d.ph)));
+    ctx.fillStyle = `rgba(232,207,148,${a})`;
+    ctx.beginPath(); ctx.arc(x, y, d.s, 0, 6.283); ctx.fill();
+  }
+}
+function finish(t, frame) {
+  // vignette
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // film grain, reseeded every frame
+  const r = mulberry32(1000 + frame);
+  for (let i = 0; i < 1800; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(r() * W, r() * H, 2, 2);
+  }
+  // watermark
+  text(TL.watermark, 60, 74, { size: 24, align: 'left', color: C.text, alpha: 0.35 });
+  // end fade (sample only)
+  const k = prog(t, DURATION - 0.6, DURATION);
+  if (k > 0) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- shared bits for the midterms video ----------
+const P = { D: '#5B8DEF', Dp: '#A9C3F5', R: '#D2493F', Rd: '#7A3A36', G: '#6A6E7A' };
+const BAR = (n) => b(n);
+function card(x, y, w, h, a = 1, stroke = 'rgba(201,169,106,0.55)', fill = 'rgba(255,255,255,0.045)') {
+  ctx.save(); ctx.globalAlpha *= a; roundRect(x, y, w, h, 22); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 2; ctx.strokeStyle = stroke; ctx.stroke(); ctx.restore();
+}
+function pop(t, t0, d = 0.5) { return easeBack(prog(t, t0, t0 + d)); }
+function seatBar(t, y, label, segs, total, x0, wid, h, t0, t1) {
+  // segs: [count, color, name]; the bar grows left -> right between t0 and t1
+  const k = easeOut(prog(t, t0, t1)); if (k <= 0) return;
+  text(label, x0 - 40, y + h / 2 + 12, { size: 34, weight: 700, align: 'right', alpha: k });
+  let x = x0;
+  for (const [n, col, name] of segs) {
+    const w = wid * n / total * k;
+    ctx.fillStyle = col; ctx.fillRect(x, y, w, h);
+    if (w > 110) text(`${name} ${n}`, x + w / 2, y + h / 2 + 11, { size: 32, weight: 700, color: '#fff', alpha: k });
+    x += w;
+  }
+}
+
+// ---------- scene D: title ----------
+function sceneTitle(t) {
+  const a = 1 - prog(t, 0.7, 1.1); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  text('美国中期选举', W / 2, 520, { size: 160, family: F.serif, weight: 900, color: C.goldHi, spacing: 6 });
+  text('背景 · 现状 · 展望', W / 2, 640, { size: 48, weight: 700, spacing: 12 });
+  text('2 0 2 6 . 1 1 . 0 3', W / 2, 730, { size: 28, color: C.gray });
+  ctx.restore();
+}
+
+// ---------- scene B: what is a midterm ----------
+function sceneWhat(t) {
+  const [s0, s1] = S.B_what, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const x0 = 300, x1 = 1620, y = 330, k = easeOut(prog(t, s0 + 0.2, s0 + 1.6)), xm = (x0 + x1) / 2;
+  ctx.strokeStyle = 'rgba(234,234,242,0.4)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + (x1 - x0) * k, y); ctx.stroke();
+  glowDot(x0, y, 9, 'rgba(234,234,242,1)', 3, k > 0.01 ? 1 : 0);
+  text('总统就职', x0, y - 44, { size: 30, color: C.gray, alpha: k }); text('2025.1', x0, y + 56, { size: 30, color: C.gray, alpha: k });
+  if (k > 0.5) {
+    const pk = pop(t, s0 + 0.9, 0.5), pulse = 1 + 0.12 * Math.sin(t * 5);
+    glowDot(xm, y, 15 * pk * pulse, 'rgba(232,207,148,1)', 5, 1);
+    text('中期选举', xm, y - 50, { size: 44, weight: 700, color: C.goldHi, alpha: pk }); text('2026.11.3', xm, y + 64, { size: 32, color: C.goldHi, alpha: pk });
+  }
+  if (k > 0.95) { glowDot(x1, y, 9, 'rgba(234,234,242,1)', 3, 1); text('任期结束', x1, y - 44, { size: 30, color: C.gray }); text('2029.1', x1, y + 56, { size: 30, color: C.gray }); }
+  const items = [{ big: () => Math.round(435 * easeOut(prog(t, T(7), T(7) + 1.0))), name: '众议院', desc: '全部改选 · 任期 2 年', at: T(7) },
+                 { big: () => '1/3', name: '参议院', desc: '约三分之一改选 · 任期 6 年', at: T(8) },
+                 { big: () => Math.round(36 * easeOut(prog(t, T(9), T(9) + 0.9))), name: '州长', desc: '36 个州同时改选', at: T(9) }];
+  items.forEach((it, i) => {
+    const p = pop(t, it.at, 0.5); if (p <= 0) return;
+    const cx = 960 + (i - 1) * 520, cy = 520;
+    ctx.save(); ctx.translate(cx, cy + 150); ctx.scale(0.9 + 0.1 * p, 0.9 + 0.1 * p); ctx.translate(-cx, -(cy + 150));
+    card(cx - 225, cy, 450, 300, clamp(p));
+    text(String(it.big()), cx, cy + 150, { size: 130, family: F.serif, weight: 900, color: C.goldHi, alpha: clamp(p) });
+    text(it.name, cx, cy + 215, { size: 42, weight: 700, alpha: clamp(p) });
+    text(it.desc, cx, cy + 262, { size: 26, color: C.gray, alpha: clamp(p) });
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ---------- scene C: what Congress holds ----------
+function scenePower(t) {
+  const [s0, s1] = S.C_power, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const P4 = [['立法', '法案须两院通过'], ['预算', '拨款与债务上限'], ['调查', '听证 · 传唤'], ['弹劾', '众院提起 · 参院审判']];
+  const dim = 1 - 0.45 * prog(t, T(20), T(20) + 0.5);
+  P4.forEach(([h, d], i) => {
+    const p = pop(t, T(16 + i), 0.5); if (p <= 0) return;
+    const cx = 960 + (i - 1.5) * 430, cy = 330;
+    ctx.save(); ctx.globalAlpha *= dim; ctx.translate(cx, cy + 130); ctx.scale(0.88 + 0.12 * p, 0.88 + 0.12 * p); ctx.translate(-cx, -(cy + 130));
+    card(cx - 190, cy, 380, 290, clamp(p));
+    text(h, cx, cy + 150, { size: 120, family: F.serif, weight: 900, color: C.goldHi, alpha: clamp(p) });
+    text(d, cx, cy + 230, { size: 30, color: C.gray, alpha: clamp(p) });
+    ctx.restore();
+  });
+  const q = easeOut(prog(t, T(20.3), T(20.3) + 0.6));
+  text('没有国会多数，总统的政策就很难推进', W / 2, 760, { size: 58, weight: 700, alpha: q });
+  ctx.restore();
+}
+
+// ---------- scene E: history ----------
+function sceneHistory(t) {
+  const [s0, s1] = S.E_history, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const v = Math.round(26 * easeOut(prog(t, T(25), T(28))));
+  text('−' + v, W / 2, 440, { size: 250, family: F.serif, weight: 900, color: C.goldHi });
+  text('二战以来，总统所在党在众议院平均丢掉的席位', W / 2, 515, { size: 34, color: C.text, alpha: 0.9 });
+  const rows = [['支持率 > 50%', 14, C.gray, T(30)], ['支持率 < 50%', 37, P.R, T(31.5)]];
+  rows.forEach(([lab, n, col, at], i) => {
+    const k = easeOut(prog(t, at, at + 1.0)); if (k <= 0) return;
+    const y = 590 + i * 84, x0 = 640;
+    text(lab, x0 - 30, y + 42, { size: 34, weight: 700, align: 'right', alpha: k });
+    ctx.fillStyle = col; ctx.fillRect(x0, y, n * 20 * k, 58);
+    text('−' + Math.round(n * k), x0 + n * 20 * k + 24, y + 44, { size: 40, weight: 700, color: C.goldHi, align: 'left', alpha: k });
+  });
+  ctx.restore();
+}
+
+// ---------- scene F: before the vote ----------
+function sceneBefore(t) {
+  const [s0, s1] = S.F_before, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const it = [['白宫', '共和党', '特朗普第二任期'], ['参议院', '53 : 47', '共和党领先'], ['众议院', '微弱多数', '共和党']];
+  it.forEach(([h, big, d], i) => {
+    const p = pop(t, T(36.3 + i * 1.5), 0.5); if (p <= 0) return;
+    const cx = 960 + (i - 1) * 520, cy = 300;
+    ctx.save(); ctx.translate(cx, cy + 140); ctx.scale(0.9 + 0.1 * p, 0.9 + 0.1 * p); ctx.translate(-cx, -(cy + 140));
+    card(cx - 225, cy, 450, 300, clamp(p), 'rgba(210,73,63,0.7)');
+    text(h, cx, cy + 70, { size: 40, weight: 700, color: C.gray, alpha: clamp(p) });
+    text(big, cx, cy + 175, { size: i === 1 ? 120 : 84, family: F.serif, weight: 900, color: P.R, alpha: clamp(p) });
+    text(d, cx, cy + 245, { size: 30, color: C.text, alpha: clamp(p) * 0.85 });
+    ctx.restore();
+  });
+  const q = easeOut(prog(t, T(41), T(41) + 0.6));
+  text('总统支持率偏低  ·  多州中途重划国会选区', W / 2, 760, { size: 48, weight: 700, color: C.goldHi, alpha: q });
+  ctx.restore();
+}
+
+// ---------- scene G: senate ----------
+const FLIPS = ['堪萨斯', '爱荷华', '德克萨斯', '俄亥俄', '缅因', '北卡罗来纳', '南卡罗来纳'];
+function sceneSenate(t) {
+  const [s0, s1] = S.G_senate, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const cell = 54, gx = 300, gy = 215, tf = T(50), tg = T(57);
+  for (let i = 0; i < 100; i++) {
+    const cx = gx + (i % 10) * cell + cell / 2, cy = gy + Math.floor(i / 10) * cell + cell / 2;
+    let col = i < 47 ? P.D : P.R, sc = 1, ft = null;
+    if (i >= 47 && i < 54) { ft = tf + (i - 47) * b(0.5); if (t >= ft) col = P.D; }
+    if (i >= 98 && t >= tg) { col = P.G; ft = tg; }
+    if (ft !== null && t >= ft && t < ft + 0.45) sc = 1 + 0.55 * Math.sin(Math.PI * prog(t, ft, ft + 0.45));
+    const appear = easeOut(prog(t, s0 + 0.1 + (99 - i) * 0.004, s0 + 0.7 + (99 - i) * 0.004));
+    ctx.globalAlpha = a * appear;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 19 * sc, 0, 6.283); ctx.fill();
+    if (i === 50) { ctx.strokeStyle = C.goldHi; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, 27, 0, 6.283); ctx.stroke(); }
+  }
+  ctx.globalAlpha = a;
+  text('金圈 = 第 51 席，参议院过半线', gx + 5 * cell, gy + 10 * cell + 46, { size: 26, color: C.gold });
+  const flips = clamp(Math.floor((t - tf) / b(0.5)) + 1, 0, 7);
+  text('民主党席位', 1290, 250, { size: 32, color: C.gray });
+  text(String(47 + flips), 1290, 420, { size: 190, family: F.serif, weight: 900, color: P.Dp });
+  FLIPS.forEach((n, i) => {
+    const p = pop(t, tf + i * b(0.5), 0.45); if (p <= 0) return;
+    const col = i < 4 ? 0 : 1, row = i % 4, x = 1080 + col * 400, y = 520 + row * 62;
+    ctx.fillStyle = P.D; ctx.beginPath(); ctx.arc(x, y - 10, 11, 0, 6.283); ctx.fill();
+    text(n, x + 30, y, { size: 38, weight: 700, align: 'left', alpha: clamp(p) });
+  });
+  const u = easeOut(prog(t, tg, tg + 0.5));
+  if (u > 0) { ctx.fillStyle = P.G; ctx.beginPath(); ctx.arc(1010, 785, 11, 0, 6.283); ctx.fill(); text('阿拉斯加 · 密西西比 未定', 1040, 796, { size: 34, weight: 700, align: 'left', alpha: u }); }
+  ctx.restore();
+}
+
+// ---------- scene H: house ----------
+function sceneHouse(t) {
+  const [s0, s1] = S.H_house, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const gx = 400, gy = 270, sp = 40, cols = 29, rows = 15;
+  const blue = Math.floor(251 * easeIO(prog(t, T(61), T(66)))), pale = prog(t, T(66), T(67.5)), red = prog(t, T(68), T(69));
+  for (let i = 0; i < 435; i++) {
+    const cx = gx + Math.floor(i / rows) * sp, cy = gy + (i % rows) * sp;
+    let col = 'rgba(234,234,242,0.18)', r = 13;
+    if (i < blue) col = P.D;
+    else if (i < 268 && pale > 0 && i >= 251) col = `rgba(169,195,245,${0.25 + 0.65 * pale})`;
+    else if (i >= 268 && red > 0) col = `rgba(210,73,63,${0.15 + 0.5 * red})`;
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.283); ctx.fill();
+  }
+  const lx = gx + 14.5 * sp + 1;
+  ctx.strokeStyle = C.goldHi; ctx.lineWidth = 3; ctx.setLineDash([10, 8]); ctx.beginPath(); ctx.moveTo(lx, gy - 28); ctx.lineTo(lx, gy + 14 * sp + 24); ctx.stroke(); ctx.setLineDash([]);
+  text('过半 218', lx, gy - 40, { size: 28, color: C.goldHi, weight: 700 });
+  const shown = pale > 0 ? '251–268' : String(Math.max(blue, 0));
+  text(shown + ' 席', W / 2, 180, { size: 96, family: F.serif, weight: 900, color: P.Dp });
+  ctx.restore();
+}
+
+// ---------- scene I: governors ----------
+function sceneGov(t) {
+  const [s0, s1] = S.I_gov, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  seatBar(t, 270, '选举前', [[24, P.D, '民主党'], [26, P.R, '共和党']], 50, 480, 1200, 74, s0 + 0.2, s0 + 1.2);
+  seatBar(t, 390, '目前', [[26, P.D, '民主党'], [4, P.G, '未定'], [20, P.R, '共和党']], 50, 480, 1200, 74, T(73), T(73) + 1.2);
+  const p = pop(t, T(76), 0.6);
+  if (p > 0) {
+    ctx.save(); ctx.translate(W / 2, 640); ctx.scale(0.9 + 0.1 * p, 0.9 + 0.1 * p); ctx.translate(-W / 2, -640);
+    card(W / 2 - 420, 540, 840, 200, clamp(p), 'rgba(91,141,239,0.8)');
+    text('德克萨斯', W / 2, 620, { size: 56, family: F.serif, weight: 900, color: P.Dp, alpha: clamp(p) });
+    text('1995 年以来首位民主党籍州长', W / 2, 690, { size: 40, weight: 700, alpha: clamp(p) });
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ---------- scene J: why ----------
+function sceneWhy(t) {
+  const [s0, s1] = S.J_why, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const R5 = ['物价与生活成本', '伊朗战争与油价', '总统支持率偏低', '部分候选人争议', '选区重划的反噬'], AT = [82, 83, 85, 86, 88];
+  R5.forEach((s, i) => {
+    const p = easeOut(prog(t, T(AT[i]), T(AT[i]) + 0.5)); if (p <= 0) return;
+    const y = 220 + i * 118, x = 960 - 40 + (1 - p) * 140;
+    card(x - 470, y, 940, 92, p);
+    text('0' + (i + 1), x - 400, y + 64, { size: 52, family: F.serif, weight: 900, color: C.goldHi, alpha: p });
+    text(s, x - 310, y + 63, { size: 46, weight: 700, align: 'left', alpha: p });
+  });
+  ctx.restore();
+}
+
+// ---------- scene K: what next ----------
+function sceneNext(t) {
+  const [s0, s1] = S.K_next, a = window01(t, s0, s1, 0.35, 0.3); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const NX = [['议长有望易主', '约翰逊不再寻求领导职务 · 杰弗里斯有望出任', 94], ['国会调查', '民主党已在筹划对政府的调查', 96],
+              ['立法僵局', '舒默：用“立法铁丝网”缠住特朗普议程', 98], ['2028 前哨战', '中期的胜利，不等于总统选举的胜利', 100]];
+  NX.forEach(([h, d, at], i) => {
+    const p = pop(t, T(at), 0.5); if (p <= 0) return;
+    const cx = 960 + (i % 2 ? 1 : -1) * 440, cy = 250 + Math.floor(i / 2) * 290;
+    ctx.save(); ctx.translate(cx, cy + 110); ctx.scale(0.9 + 0.1 * p, 0.9 + 0.1 * p); ctx.translate(-cx, -(cy + 110));
+    card(cx - 410, cy, 820, 240, clamp(p));
+    text(h, cx, cy + 100, { size: 64, family: F.serif, weight: 900, color: C.goldHi, alpha: clamp(p) });
+    text(d, cx, cy + 170, { size: 30, color: C.text, alpha: clamp(p) * 0.85 });
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ---------- scene L: end ----------
+function sceneEnd(t) {
+  const [s0, s1] = S.L_end, a = window01(t, s0, s1, 0.5, 0.0001); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha = a;
+  const p = easeOut(prog(t, s0 + 0.2, s0 + 1.2)), q = easeOut(prog(t, T(108), T(108) + 0.8));
+  text('一场期中考', W / 2, 400, { size: 130, family: F.serif, weight: 900, color: C.goldHi, alpha: p });
+  text('也是下一场较量的起点', W / 2, 500, { size: 54, weight: 700, alpha: p });
+  text('分裂政府，会带来什么？', W / 2, 660, { size: 62, family: F.serif, weight: 900, color: P.Dp, alpha: q });
+  ctx.restore();
+}
+
+// ---------- compose ----------
+function render(t, frame) {
+  background(t, frame);
+  const lab = (key, str) => topLabel(t, S[key][0] - 0.1, S[key][1], str);
+  lab('B_what', '什 么 是 中 期 选 举'); lab('C_power', '国 会 手 里 有 什 么'); lab('E_history', '历 史 规 律');
+  lab('F_before', '选 前 局 势'); lab('G_senate', '参 议 院 · 1 0 0 席'); lab('H_house', '众 议 院 · 4 3 5 席');
+  lab('I_gov', '州 长 · 5 0 席'); lab('J_why', '为 什 么 会 这 样'); lab('K_next', '接 下 来'); lab('L_end', '展 望');
+  dust(t, 0.45);
+  sceneTitle(t); sceneWhat(t); scenePower(t); sceneHistory(t); sceneBefore(t); sceneSenate(t); sceneHouse(t); sceneGov(t); sceneWhy(t); sceneNext(t); sceneEnd(t);
+  const sub = (n0, n1, zh, en) => subtitle(t, T(n0) + 0.05, T(n1), zh, en);
+  sub(4, 8, '总统任期走到一半，选民给国会重新洗牌', 'Halfway through a presidential term, voters reshuffle Congress.');
+  sub(8, 14, '众议院 435 席全改，参议院约三分之一，另有 36 个州选州长', 'All 435 House seats, a third of the Senate, 36 governors.');
+  sub(14, 20, '国会握着四张牌：立法、预算、调查、弹劾', 'Congress holds four cards: laws, budget, oversight, impeachment.');
+  sub(20, 24, '所以，中期选举是对总统的期中考', 'So a midterm is a report card on the president.');
+  sub(24, 30, '二战以来，总统所在党在众议院平均丢约 26 席', 'Since WWII, the president\'s party loses about 26 House seats.');
+  sub(30, 36, '只有 1998、2002 年例外；支持率低于 50%，平均丢 37 席', 'Only 1998 and 2002 were exceptions. Below 50% approval: 37.');
+  sub(36, 41, '选前，共和党同时掌握白宫和国会两院', 'Republicans held the White House and both chambers.');
+  sub(41, 46, '总统支持率偏低，各州还在抢着重划选区', 'Low approval, and a redistricting war across the states.');
+  sub(46, 50, '先看参议院：选前共和党 53 比 47 领先', 'The Senate: Republicans led 53 to 47.');
+  sub(50, 57, '民主党翻转 7 席，至少 54 席', 'Democrats flipped seven seats: at least 54.');
+  sub(57, 60, '阿拉斯加、密西西比仍未定', 'Alaska and Mississippi are still too close to call.');
+  sub(60, 66, '再看众议院：过半线是 218 席', 'The House: 218 seats make a majority.');
+  sub(66, 72, '民主党转为多数，预计 251 到 268 席', 'Democrats take it: a projected 251 to 268 seats.');
+  note(t, T(66), T(72), 'CBS News 预测 · 数据截至 11 月 9 日，计票仍在继续', W / 2, 872);
+  sub(72, 76, '州长：民主党从 24 个增至 26 个（AP 早期统计）', 'Governors: Democrats rise from 24 to 26 (early AP count).');
+  sub(76, 80, '德州出现 1995 年以来首位民主党州长', 'Texas elects its first Democratic governor since 1995.');
+  sub(80, 86, '原因：物价、油价、伊朗战争，加上总统支持率偏低', 'Prices, gas, the Iran war, and a low approval rating.');
+  sub(86, 92, '还有候选人争议，选区重划也反噬了发起者', 'Plus controversial candidates and redistricting that backfired.');
+  sub(92, 98, '新国会明年 1 月就职，议长有望易主，调查随之展开', 'In January: a likely new Speaker, and investigations.');
+  sub(98, 104, '立法僵局难免，目光转向 2028', 'Expect gridlock — and all eyes turn to 2028.');
+  sub(104, 108, '这是一场期中考，也是下一场较量的起点', 'A report card, and the start of the next contest.');
+  sub(108, 112, '你觉得，分裂政府会带来什么？', 'What will divided government bring?');
+  note(t, T(108), T(112), '数据：CBS · AP · Gallup · FiveThirtyEight  |  截至 2026.11.9，仍在计票', W / 2, 800);
+  finish(t, frame);
+}
+
+window.ALL_TEXT = document.documentElement.innerHTML;
+window.ready = (async () => {
+  const sample = window.ALL_TEXT;
+  await Promise.all([
+    document.fonts.load(`900 92px ${F.serif}`, sample),
+    document.fonts.load(`400 40px ${F.sans}`, sample),
+    document.fonts.load(`700 40px ${F.sans}`, sample),
+    document.fonts.load(`italic 400 30px ${F.en}`, sample),
+  ]);
+  await document.fonts.ready;
+  return { duration: DURATION, frames: Math.ceil(DURATION * TL.fps) };
+})();
+window.render = render;
+</script>
+</body>
+</html>

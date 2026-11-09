@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>cover</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body><canvas id="c" width="1080" height="1440"></canvas>
+<script>
+// 3:4 cover (1080x1440): black ground, white + yellow heavy title, pill subtitle, and the 100-seat Senate dot grid from the video.
+const W = 1080, H = 1440, ctx = document.getElementById('c').getContext('2d'), SANS = '"Noto Sans SC"';
+function outlined(str, x, y, size, fill, stroke, lw, glow) {
+  ctx.save(); ctx.font = `900 ${size}px ${SANS}`; ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+  if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 36; }
+  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.strokeText(str, x, y); ctx.shadowBlur = 0; ctx.fillStyle = fill; ctx.fillText(str, x, y); ctx.restore();
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function draw() {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(540, 1080, 80, 540, 1080, 620);
+  g.addColorStop(0, 'rgba(91,141,239,0.35)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 600, W, 840);
+  outlined('美国中期', 540, 250, 200, '#ffffff', '#000', 18, 'rgba(255,255,255,0.35)');
+  outlined('选举', 540, 480, 250, '#fff200', '#000', 20, 'rgba(255,230,0,0.45)');
+  ctx.save(); rr(190, 560, 700, 104, 52); ctx.fillStyle = '#000'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.font = `900 62px ${SANS}`; ctx.letterSpacing = '8px'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('一次看懂', 544, 636); ctx.restore();
+  // 100 Senate seats: 54 D, 44 R, 2 undecided
+  for (let i = 0; i < 100; i++) {
+    const x = 540 + (i % 20 - 9.5) * 46, y = 900 + Math.floor(i / 20) * 56 + 100;
+    const col = i < 54 ? '#5B8DEF' : i < 98 ? '#D2493F' : '#6A6E7A';
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = 18; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 17, 0, 6.283); ctx.fill(); ctx.restore();
+  }
+  ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', 540, 1412); ctx.restore();
+}
+window.ready = (async () => {
+  const sample = '美国中期选举一次看懂@比特双子';
+  await Promise.all([document.fonts.load(`900 100px ${SANS}`, sample), document.fonts.load(`700 26px ${SANS}`, sample)]);
+  await document.fonts.ready; draw(); return true;
+})();
+</script></body></html>

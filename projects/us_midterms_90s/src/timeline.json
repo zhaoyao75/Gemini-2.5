@@ -1,0 +1,256 @@
+{
+ "fps": 30,
+ "bpm": 77,
+ "total_beats": 112,
+ "tail_seconds": 0.5,
+ "scenes_beats": {
+  "D_title": [
+   0,
+   4
+  ],
+  "B_what": [
+   4,
+   14
+  ],
+  "C_power": [
+   14,
+   24
+  ],
+  "E_history": [
+   24,
+   36
+  ],
+  "F_before": [
+   36,
+   46
+  ],
+  "G_senate": [
+   46,
+   60
+  ],
+  "H_house": [
+   60,
+   72
+  ],
+  "I_gov": [
+   72,
+   80
+  ],
+  "J_why": [
+   80,
+   92
+  ],
+  "K_next": [
+   92,
+   104
+  ],
+  "L_end": [
+   104,
+   112
+  ]
+ },
+ "sfx_beats": [
+  {
+   "beat": 0,
+   "type": "thud"
+  },
+  {
+   "beat": 4,
+   "type": "whoosh"
+  },
+  {
+   "beat": 7,
+   "type": "tick"
+  },
+  {
+   "beat": 8,
+   "type": "tick"
+  },
+  {
+   "beat": 9,
+   "type": "tick"
+  },
+  {
+   "beat": 10,
+   "type": "tick"
+  },
+  {
+   "beat": 11,
+   "type": "tick"
+  },
+  {
+   "beat": 14,
+   "type": "whoosh"
+  },
+  {
+   "beat": 16,
+   "type": "pop"
+  },
+  {
+   "beat": 17,
+   "type": "pop"
+  },
+  {
+   "beat": 18,
+   "type": "pop"
+  },
+  {
+   "beat": 19,
+   "type": "pop"
+  },
+  {
+   "beat": 24,
+   "type": "whoosh"
+  },
+  {
+   "beat": 28,
+   "type": "ding"
+  },
+  {
+   "beat": 31,
+   "type": "ding"
+  },
+  {
+   "beat": 33,
+   "type": "thud"
+  },
+  {
+   "beat": 36,
+   "type": "whoosh"
+  },
+  {
+   "beat": 38,
+   "type": "pop"
+  },
+  {
+   "beat": 39,
+   "type": "pop"
+  },
+  {
+   "beat": 40,
+   "type": "pop"
+  },
+  {
+   "beat": 41,
+   "type": "pop"
+  },
+  {
+   "beat": 46,
+   "type": "whoosh"
+  },
+  {
+   "beat": 50.0,
+   "type": "pop"
+  },
+  {
+   "beat": 51.5,
+   "type": "pop"
+  },
+  {
+   "beat": 53.0,
+   "type": "pop"
+  },
+  {
+   "beat": 54.5,
+   "type": "pop"
+  },
+  {
+   "beat": 56.0,
+   "type": "pop"
+  },
+  {
+   "beat": 57,
+   "type": "ding"
+  },
+  {
+   "beat": 57.5,
+   "type": "pop"
+  },
+  {
+   "beat": 59.0,
+   "type": "pop"
+  },
+  {
+   "beat": 60,
+   "type": "whoosh"
+  },
+  {
+   "beat": 64,
+   "type": "swell"
+  },
+  {
+   "beat": 68,
+   "type": "ding"
+  },
+  {
+   "beat": 72,
+   "type": "whoosh"
+  },
+  {
+   "beat": 75,
+   "type": "ding"
+  },
+  {
+   "beat": 77,
+   "type": "ding"
+  },
+  {
+   "beat": 80,
+   "type": "whoosh"
+  },
+  {
+   "beat": 82,
+   "type": "pop"
+  },
+  {
+   "beat": 83,
+   "type": "pop"
+  },
+  {
+   "beat": 85,
+   "type": "pop"
+  },
+  {
+   "beat": 86,
+   "type": "pop"
+  },
+  {
+   "beat": 88,
+   "type": "pop"
+  },
+  {
+   "beat": 92,
+   "type": "whoosh"
+  },
+  {
+   "beat": 94,
+   "type": "pop"
+  },
+  {
+   "beat": 96,
+   "type": "pop"
+  },
+  {
+   "beat": 98,
+   "type": "pop"
+  },
+  {
+   "beat": 100,
+   "type": "pop"
+  },
+  {
+   "beat": 104,
+   "type": "whoosh"
+  },
+  {
+   "beat": 104,
+   "type": "swell"
+  },
+  {
+   "beat": 108,
+   "type": "ding"
+  }
+ ],
+ "watermark": "@比特双子",
+ "intro_seconds": 1.0
+}
