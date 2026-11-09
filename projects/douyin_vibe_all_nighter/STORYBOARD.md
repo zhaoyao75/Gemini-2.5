@@ -48,7 +48,7 @@
 
 ## 发布文案草稿
 
-- 标题：`Vibe知识大赏｜《熬一个通宵 ≈ 醉驾？》熬到凌晨两点，你已经「喝了」半斤？` ←（「半斤」是修辞，需你定；不用的话就用《熬一个通宵 ≈ 醉驾？》原题）
+- 标题：`Vibe知识大赏｜《熬一个通宵 ≈ 醉驾？》熬到凌晨两点，你的反应已经像喝了酒`
 - 标签：`#vibe知识大赏 #熬夜 #睡眠 #酒驾 #健康`
 - 置顶评论：① Williamson & Feyer (2000), Occup Environ Med 57(10):649–655；② Dawson & Reid (1997), Nature 388:235；③ GB 19522—2024；④ AAA Foundation (2016), Acute Sleep Deprivation and Risk of Motor Vehicle Crash Involvement；⑤「本片由 AI 编写代码生成，无实拍素材」。
 
