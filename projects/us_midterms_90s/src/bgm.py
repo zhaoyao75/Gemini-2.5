@@ -22,7 +22,7 @@ INTRO, TB = TL["intro_seconds"], TL["scenes_beats"]["D_title"][1]
 def T(n): return n / TB * INTRO if n < TB else INTRO + (n - TB) * VBEAT
 SC, TOTAL = TL["scenes_beats"], TL["total_beats"]
 A0, C0, E0, I0 = (SC[k][0] for k in ("B_what", "C_power", "E_history", "L_end"))
-DROP = SC["G_senate"][0] + 4                     # video beat 42: the first Senate seat flips here
+DROP = SC["G_senate"][0] + 6                     # video beat 44: the 4th Senate flip pushes the reading past 51
 STEP = 1 / 8                                     # one 16th of the double-time bar, in video beats
 DUR = T(TOTAL) + TL["tail_seconds"]
 N = int(DUR * SR); tt = np.arange(N) / SR; rng = np.random.default_rng(132)
