@@ -1,17 +1,15 @@
-"""Music for 《熬一个通宵 ≈ 醉驾？》 — up-tempo Latin pop on the dembow, after the user's reference clip. numpy only, no sound effects.
+"""Music for 《熬一个通宵 ≈ 醉驾？》 — dark F-minor atmosphere, after the user's second reference recording. numpy only, no sound effects.
 
-Reference (measured): ~132 BPM, four-on-the-floor kick, heavy 808, F major / D minor, a sung hook on the cinquillo.
-Here: the video's 77 BPM grid played double-time (154 BPM feel), so every scene change still lands on a beat.
-One music bar = 16 steps = 2 video beats. Four Euclidean layers, as in the reference:
-  KICK      E(4,16)  x...x...x...x...
-  TRESILLO  E(3,8)   x.....x.....x...   -> 808 bass
-  CINQUILLO E(5,8)   x...x.x...x.x...   -> chord comping
-  MELODY    E(9,16)  x.x.x.x.xx.x.x.x   -> the hook: F-centred, C4–C5, short notes, keeps returning to F4
-  DEMBOW    snare    ...x..x....x..x.
-Harmony: Dm – B♭ – F – C, one chord per video bar. Hook = 2 music bars: the first identical every time, the second answers.
-  0–1 s   vocal chord + 808 boom;  A–B kick, 808, hook;  C +dembow snare, chord plucks;  E +16th hats, pad
-  25.9 s  (picture crosses 80 mg) fill, bell, hook doubled an octave up, no gap
-  I–J     drums out, F major, the hook once more, soft ending
+Reference (measured from the recording): ~113 BPM, thick sustained chords (F3 pedal, Eb4/F4/G4/Ab4/C5 = F minor),
+very sparse rhythm (1–2 onsets/s), a deep kick every ~0.55 s over a sustained sub, a breakdown where sub and kick drop out
+for ~2 s and then re-enter louder.
+Here (video beat 66 BPM, so a quarter = 0.4545 s, 132 BPM):
+  chords   Fm9 – Ebmaj9 – Fm9 – Abmaj7, one per video bar, warm detuned saws, slow filter
+  melody   a slow 4-bar line on long notes (same every time):  F G Ab | G F Eb | F G C | C Ab G
+  bass     sustained 808 on the chord root, ducked by the kick
+  kick     every video beat in A–B, every half beat from C;  hats only offbeat, very soft
+  DROP-2   breakdown: kick + sub drop out, chords filtered shut and rising, then DROP (80 mg crossing) = loud re-entry
+  I–J      F major (the sun comes up), drums out, the melody once more, long final F
 """
 import json, os, wave
 from pathlib import Path
@@ -28,7 +26,7 @@ DROP = F0 + 5                                    # video beat 36: the picture cr
 STEP = 1 / 8                                     # one 16th of the double-time bar, in video beats
 DUR = T(TOTAL) + TL["tail_seconds"]
 N = int(DUR * SR); tt = np.arange(N) / SR; rng = np.random.default_rng(132)
-BUS = {k: np.zeros((N, 2)) for k in ("vox", "keys", "drums", "bass", "pad")}
+BUS = {k: np.zeros((N, 2)) for k in ("lead", "keys", "drums", "bass", "pad", "fx")}
 
 def add(bus, sig, start, pan=0.0, gain=1.0):
     i = int(round(start * SR))
@@ -58,133 +56,115 @@ CINQUILLO = [i % 2 == 0 and _c[i // 2] for i in range(16)]
 DEMBOW = [i in (3, 6, 11, 14) for i in range(16)]
 CQ_LEN = [4, 2, 4, 2, 4]                         # steps until the next cinquillo hit
 
-# ---------- instruments ----------
-VOWELS = {"a": [(800, 80, 1.0), (1150, 90, 0.5), (2900, 120, 0.25), (3900, 130, 0.12)],
-          "o": [(450, 70, 1.0), (800, 80, 0.4), (2830, 100, 0.15), (3800, 120, 0.08)],
-          "e": [(400, 60, 1.0), (1700, 90, 0.45), (2600, 100, 0.3), (3900, 120, 0.12)]}
-def vox(m, dur, vowel="a", vib=True):
-    """synthetic sung vowel: band-limited pulse train through four formant peaks"""
+
+KICK_STEP = 0.5                                              # half a video beat = one quarter at 132 BPM
+def saw(f, n, phase=0.0):
+    return 2 * np.mod(np.cumsum(np.broadcast_to(f, (n,)) / SR) + phase, 1.0) - 1
+def warm_pad(notes, dur, cut=1800, att=0.35, rel=0.6):
+    n = int(dur * SR); out = np.zeros((n, 2))
+    for m in notes:
+        for vi, d in enumerate((-0.09, -0.03, 0.03, 0.09)):
+            s = saw(hz(m) * 2 ** (d / 12), n, rng.uniform()); pan = (vi - 1.5) / 1.5 * 0.7
+            out[:, 0] += s * np.sqrt(0.5 * (1 - pan)); out[:, 1] += s * np.sqrt(0.5 * (1 + pan))
+    out = filt(out, hi=cut, order=2) * env(n, att, rel)[:, None]
+    return out / (len(notes) * 4) ** 0.5 / 2.2
+def lead(m, dur):
     n = int(dur * SR); t = np.arange(n) / SR
-    f0 = hz(m) * (1 + (0.012 * np.sin(2 * np.pi * 5.6 * t) * np.clip((t - 0.12) / 0.15, 0, 1) if vib else 0)) * (1 - 0.02 * np.exp(-t * 30))
-    ph = 2 * np.pi * np.cumsum(f0) / SR; src = np.zeros(n)
-    for h in range(1, 40):
-        if hz(m) * h > 8000: break
-        src += np.sin(h * ph) / h ** 0.9
-    src += 0.04 * rng.standard_normal(n)                              # breath
-    X = np.fft.rfft(src); f = np.fft.rfftfreq(n, 1 / SR)
-    G = sum(a / (1 + ((f - fc) / bw) ** 2) for fc, bw, a in VOWELS[vowel]) + 0.02
-    s = np.fft.irfft(X * G, n=n)
-    s *= env(n, 0.015, 0.06); return s / (np.abs(s).max() + 1e-9)
-def pluck(m, dur=0.4, bright=1.0):
-    n = int(dur * SR); t = np.arange(n) / SR; s = np.zeros(n)
-    for h in range(1, 12):
-        if hz(m) * h > 11000: break
-        s += np.sin(2 * np.pi * hz(m) * h * t + rng.uniform(0, 6)) / h * np.exp(-t * (7 + h * 3 / bright))
-    return s * env(n, 0.001, 0.04)
+    f = hz(m) * (1 + 0.005 * np.sin(2 * np.pi * 5.2 * t) * np.clip((t - 0.25) / 0.3, 0, 1)); ph = np.cumsum(f) / SR
+    s = 0.6 * np.sin(2 * np.pi * ph) + 0.25 * (2 * np.mod(ph, 1) - 1) + 0.15 * (2 * np.mod(ph * 1.004, 1) - 1)
+    s = filt(s, hi=2200, order=2) * env(n, 0.03, 0.3)
+    return s / (np.abs(s).max() + 1e-9)
+def kick():
+    n = int(0.45 * SR); t = np.arange(n) / SR
+    return np.tanh(2.0 * np.sin(2 * np.pi * np.cumsum(46 + 110 * np.exp(-t * 28)) / SR) * np.exp(-t * 8)) * env(n, 0.0008, 0.04)
+def sub(m, dur):
+    n = int(dur * SR); t = np.arange(n) / SR; ph = 2 * np.pi * hz(m) * t
+    return np.tanh(1.6 * (np.sin(ph) + 0.2 * np.sin(2 * ph))) * env(n, 0.01, 0.12)
+HH = filt(rng.standard_normal(int(0.3 * SR)), lo=7000); HH /= np.abs(HH).max()
+def hat():
+    n = int(0.05 * SR); return HH[:n] * np.exp(-np.arange(n) / SR * 80)
+def crash():
+    n = int(2.6 * SR); t = np.arange(n) / SR; c = filt(rng.standard_normal((n, 2)), lo=3500); return c / np.abs(c).max() * np.exp(-t * 1.5)[:, None]
 def bell(m, dur=3.0):
     n = int(dur * SR); t = np.arange(n) / SR; f = hz(m)
-    return sum(a * np.sin(2 * np.pi * f * r * t) * np.exp(-t * d) for r, a, d in ((1, 1, 1.4), (2.76, 0.4, 3), (5.4, 0.2, 6))) * env(n, 0.001, 0.2)
-def kick():
-    n = int(0.32 * SR); t = np.arange(n) / SR
-    body = np.sin(2 * np.pi * np.cumsum(50 + 150 * np.exp(-t * 38)) / SR) * np.exp(-t * 11)
-    return np.tanh(2.2 * (body + filt(rng.standard_normal(n), lo=2500) * np.exp(-t * 600) * 0.5)) * env(n, 0.0005, 0.02)
-def snare():
-    n = int(0.2 * SR); t = np.arange(n) / SR; nz = filt(rng.standard_normal(n), lo=1800, hi=10000)
-    return nz / np.abs(nz).max() * np.exp(-t * 26) + 0.6 * np.sin(2 * np.pi * np.cumsum(230 + 90 * np.exp(-t * 60)) / SR) * np.exp(-t * 30)
-def rim():
-    n = int(0.05 * SR); t = np.arange(n) / SR
-    return (np.sin(2 * np.pi * 1750 * t) + 0.5 * np.sin(2 * np.pi * 2650 * t)) * np.exp(-t * 100)
-HH = filt(rng.standard_normal(int(0.3 * SR)), lo=7000); HH /= np.abs(HH).max()
-def hat(open_=False):
-    n = int((0.16 if open_ else 0.04) * SR); return HH[:n] * np.exp(-np.arange(n) / SR * (18 if open_ else 90))
-def b808(m, dur):
-    n = int(dur * SR); t = np.arange(n) / SR
-    ph = 2 * np.pi * np.cumsum(hz(m) * (1 + 0.6 * np.exp(-t * 35))) / SR
-    return np.tanh(2.0 * (np.sin(ph) + 0.15 * np.sin(2 * ph))) * np.exp(-t * 1.2) * env(n, 0.002, 0.04)
-def pad(notes, dur, att=0.4):
-    n = int(dur * SR); t = np.arange(n) / SR; out = np.zeros((n, 2))
-    for m in notes:
-        for vi, d in enumerate((-0.08, 0.08)):
-            f = hz(m) * 2 ** (d / 12); s = sum(np.sin(2 * np.pi * f * h * t + rng.uniform(0, 6)) / h ** 1.5 for h in (1, 2, 3, 4))
-            pan = -0.6 if vi == 0 else 0.6; out[:, 0] += s * np.sqrt(0.5 * (1 - pan)); out[:, 1] += s * np.sqrt(0.5 * (1 + pan))
-    out *= env(n, att, 0.8)[:, None]; return out / (np.abs(out).max() + 1e-9)
-def crash():
-    n = int(2.2 * SR); t = np.arange(n) / SR; c = filt(rng.standard_normal((n, 2)), lo=4000); return c / np.abs(c).max() * np.exp(-t * 1.8)[:, None]
+    return sum(a * np.sin(2 * np.pi * f * r * t) * np.exp(-t * d) for r, a, d in ((1, 1, 1.2), (2.76, 0.4, 2.5), (5.4, 0.2, 5))) * env(n, 0.001, 0.2)
 
-# ---------- harmony & hook (D minor) ----------
-PROG = ["Dm", "Bb", "F", "C"]
-CH = {"Dm": [62, 65, 69], "Bb": [58, 62, 65], "F": [60, 65, 69], "C": [60, 64, 67]}
-ROOTS = {"Dm": 38, "Bb": 34, "F": 41, "C": 36}
-# THE MELODY: F-centred, narrow (C4–C5), short dense notes on E(9,16), and it keeps coming back to F4.
-#   call   (bar 1, identical every time)  F F G F D F G F C   -> the last note C4 is a pickup that falls back to F4
-#   answer (bar 2, last two notes follow the chord)  F G A G F D F | x y
-MELODY = euclid(9, 16)                                       # x.x.x.x.xx.x.x.x
-CALL = [65, 65, 67, 65, 62, 65, 67, 65, 60]
-ANSWER_HEAD = [65, 67, 69, 67, 65, 62, 65]
-ANSWER_TAIL = {"Dm": [67, 60], "Bb": [69, 60], "F": [69, 72], "C": [67, 64]}
-def chord_at(vb): return PROG[int((vb - A0) // 4) % 4]
+PROG = ["Fm9", "Eb", "Fm9", "Ab"]
+CH = {"Fm9": [53, 56, 60, 63, 67], "Eb": [51, 55, 58, 62, 65], "Ab": [56, 60, 63, 67]}
+ROOTS = {"Fm9": 41, "Eb": 39, "Ab": 44}
+# melody: (start offset in video beats within the 4-beat bar, MIDI note, length in video beats)
+LINE = [[(0, 65, 2), (2, 67, 1), (3, 68, 1)],
+        [(0, 67, 2), (2, 65, 1), (3, 63, 1)],
+        [(0, 65, 2), (2, 67, 1), (3, 72, 1)],
+        [(0, 72, 2), (2, 68, 1), (3, 67, 1)]]
 def level(b, pts): xs, ys = zip(*pts); return float(np.interp(b, xs, ys))
+BREAK0 = DROP - 2                                            # the breakdown starts two video beats before the crossing
 
-# ---------- 0–1 s: the hit ----------
-add("bass", b808(38, 1.0), 0, gain=0.9); add("drums", kick(), 0, gain=0.9); add("drums", crash(), 0, gain=0.35)
-for k in range(4): add("drums", snare(), T(2 + k * 0.5), gain=0.12 + 0.08 * k)          # small fill into the groove
+# ---------- 0–1 s: chord swell + boom ----------
+add("pad", warm_pad(CH["Fm9"], 1.4, cut=3500, att=0.02, rel=0.6), 0, gain=1.0)
+add("bass", sub(29, 1.2), 0, gain=0.9); add("drums", kick(), 0, gain=0.9); add("drums", crash(), 0, gain=0.3)
 
-# ---------- groove (A .. I) ----------
-for k in range(int((I0 - A0) / STEP)):
-    vb = A0 + k * STEP; s16 = k % 16; mbar = k // 16; c = chord_at(vb)
-    after = vb >= DROP
-    if KICK[s16]: add("drums", kick(), T(vb), gain=level(vb, [(A0, 0.75), (C0, 0.85), (DROP, 0.95)]))
-    if TRESILLO[s16]:
-        ln = 6 if s16 < 12 else 4
-        add("bass", b808(ROOTS[c] + (7 if s16 == 12 and mbar % 2 else 0), ln * STEP * VBEAT * 0.95), T(vb), gain=0.8)
-    if MELODY[s16]:
-        j = sum(MELODY[:s16]); notes = CALL if mbar % 2 == 0 else ANSWER_HEAD + ANSWER_TAIL[c]
-        add("keys", pluck(notes[j], 0.3, 1.2), T(vb), pan=-0.2, gain=level(vb, [(A0, 0.8), (C0, 0.9)]))
-    if DEMBOW[s16]:
-        if vb < C0: add("drums", rim(), T(vb), pan=0.2, gain=0.35)
-        else: add("drums", snare(), T(vb), pan=0.05, gain=level(vb, [(C0, 0.45), (E0, 0.55)]))
-    # hats: 8ths, 16ths from E, an open hat late in the bar
-    if s16 % 2 == 0 or vb >= E0: add("drums", hat(), T(vb), pan=0.3, gain=(0.7 if s16 % 2 == 0 else 0.38))
-    if vb >= C0 and s16 == 14: add("drums", hat(True), T(vb), pan=-0.2, gain=0.8)
-    # chord comping on the CINQUILLO hits (E(5,8)) from C, softer than the melody
-    if vb >= C0 and CINQUILLO[s16]:
-        for m in CH[c]: add("keys", pluck(m, 0.3, 0.9), T(vb), pan=0.3, gain=0.2)
-# pad from E
-for vb in range(E0 - (E0 - A0) % 4, I0, 4):
-    c = chord_at(vb); st = max(vb, E0); end = min(vb + 4, I0)
-    add("pad", pad(CH[c] + [CH[c][0] + 12], (end - st) * VBEAT + 0.5), T(st), gain=0.12 if vb < DROP else 0.17)
-# fill + bell at the crossing (no gap)
-for k in range(8): add("drums", snare(), T(DROP - 1 + k * STEP), gain=0.15 + 0.05 * k)
-add("drums", crash(), T(DROP), gain=0.4); add("keys", bell(86), T(DROP), pan=0.2, gain=0.25)
+# ---------- A .. I ----------
+for bar in range(A0, I0, 4):
+    bi = ((bar - A0) // 4) % 4; c = PROG[bi]; end = min(bar + 4, I0); drop = bar >= DROP
+    in_break = lambda b: BREAK0 <= b < DROP
+    # pad: whole bar; closed + rising in the breakdown
+    for seg_start, seg_end in ((bar, min(end, BREAK0)) if bar < BREAK0 < end else (bar, end),) if not (bar < BREAK0 < end) else ((bar, BREAK0), (BREAK0, end)):
+        if seg_end <= seg_start: continue
+        cut = 650 if in_break(seg_start) else (2600 if drop else 1500)
+        add("pad", warm_pad(CH[c], (seg_end - seg_start) * VBEAT + 0.4, cut=cut, att=0.25 if not drop else 0.05), T(seg_start), gain=level(seg_start, [(A0, 0.6), (C0, 0.75), (E0, 0.9), (DROP, 1.15)]))
+    # melody on long notes
+    for off, m, ln in LINE[bi]:
+        b = bar + off
+        if b >= I0: continue
+        add("lead", lead(m, ln * VBEAT * 0.97), T(b), pan=-0.1, gain=level(b, [(A0, 0.7), (DROP, 0.85)]))
+        if drop: add("lead", lead(m + 12, ln * VBEAT * 0.97), T(b), pan=0.2, gain=0.3)
+    # sustained sub on the root (out during the breakdown)
+    for k in range(int((end - bar))):
+        b = bar + k
+        if in_break(b) or b >= I0: continue
+        add("bass", sub(ROOTS[c], VBEAT * 1.0), T(b), gain=0.85)
+# kick (sparse in A–B, every quarter from C), hats offbeat from C
+k = 0
+while A0 + k * KICK_STEP < I0:
+    b = A0 + k * KICK_STEP; k += 1
+    if BREAK0 <= b < DROP: continue
+    if b < C0 and b % 1: continue
+    add("drums", kick(), T(b), gain=level(b, [(A0, 0.7), (C0, 0.85), (DROP, 1.0)]))
+    if b >= C0 and (b % 1) == 0.5: add("drums", hat(), T(b), pan=0.3, gain=0.35)
+# breakdown riser, re-entry hit
+nb = int((T(DROP) - T(BREAK0)) * SR); u = np.arange(nb) / nb
+nz = filt(rng.standard_normal((nb, 2)), lo=1500) * (u ** 2)[:, None]
+add("fx", nz / np.abs(nz).max(), T(BREAK0), gain=0.3)
+add("drums", crash(), T(DROP), gain=0.5); add("drums", kick(), T(DROP), gain=1.1); add("keys", bell(79), T(DROP), pan=0.2, gain=0.25)
 
-# ---------- I–J: F major, drums out, the hook once more ----------
-for vb, c, ln in ((I0, "Bb", 1.5), (I0 + 1.5, "C", 1.5), (I0 + 3, "F", TOTAL - I0 - 3)):
-    add("pad", pad(CH[c] + [CH[c][1] + 12], ln * VBEAT + 1.5, att=0.2), T(vb), gain=0.2)
-    add("bass", b808(ROOTS[c], ln * VBEAT), T(vb), gain=0.55)
+# ---------- I–J: F major, drums out, the line once more ----------
+for vb, root, notes, ln in ((I0, 41, [53, 57, 60, 64], 2), (I0 + 2, 36, [55, 60, 64, 67], 2), (I0 + 4, 41, [53, 57, 60, 64], TOTAL - I0 - 4)):
+    add("pad", warm_pad(notes, ln * VBEAT + 1.2, cut=2400, att=0.3, rel=1.2), T(vb), gain=0.95)
+    add("bass", sub(root, ln * VBEAT), T(vb), gain=0.7)
 add("drums", crash(), T(I0), gain=0.25)
-END = [CALL[:-1] + [64], [65, 67, 69, 67, 65, 69, 72, 69, 65]]     # bar 1: call ending on E; bar 2: rises and settles on a long F
-for k in range(32):
-    vb = I0 + k * STEP; s16 = k % 16
-    if MELODY[s16] and vb < TOTAL - 0.5:
-        j = sum(MELODY[:s16]); last = k // 16 == 1 and j == 8
-        add("keys", pluck(END[k // 16][j], 2.2 if last else 0.3, 0.9), T(vb), pan=-0.2, gain=0.55)
-    if s16 % 2 == 0 and vb < J0 + 2: add("drums", hat(), T(vb), pan=0.3, gain=0.1)
-for k, m in enumerate((53, 60, 65, 69, 72, 77)): add("keys", pluck(m, 1.8, 0.6), T(J0 + 1) + 0.05 * k, pan=-0.3 + 0.12 * k, gain=0.25)
+END = [(0, 65, 2), (2, 67, 1), (3, 69, 1), (4, 67, 2), (6, 65, 1), (7, 64, 1), (8, 65, 3)]   # F G A | G F E | F (long)
+for off, m, ln in END:
+    b = I0 + off
+    if b < TOTAL: add("lead", lead(m, min(ln, TOTAL - b) * VBEAT * (1.0 if ln == 3 else 0.97) + (1.0 if ln == 3 else 0)), T(b), pan=-0.1, gain=0.75)
 
 # ---------- mix ----------
 irn = int(1.6 * SR); it = np.arange(irn) / SR
 ir = filt(rng.standard_normal((irn, 2)), lo=300, hi=7000) * np.exp(-it / 0.35)[:, None]; ir /= np.sqrt((ir ** 2).sum(axis=0))
-send = BUS["keys"] * 0.4 + BUS["pad"] * 0.4 + BUS["drums"] * 0.05
+send = BUS["lead"] * 0.5 + BUS["keys"] * 0.4 + BUS["pad"] * 0.35 + BUS["fx"] * 0.3
 nf = 1 << (N + irn - 1).bit_length()
 wet = np.stack([np.fft.irfft(np.fft.rfft(send[:, c], nf) * np.fft.rfft(ir[:, c], nf), nf)[:N] for c in range(2)], 1)
-sc = np.ones(N)                                               # light sidechain on pad/keys from the kick
-for k in range(int((I0 - A0) / STEP)):
-    if KICK[k % 16]:
-        i = int(T(A0 + k * STEP) * SR); n = min(int(0.2 * SR), N - i); e = np.arange(n) / SR
-        sc[i:i + n] = np.minimum(sc[i:i + n], 1 - 0.35 * np.exp(-e / 0.06))
-for b in ("pad", "keys"): BUS[b] *= sc[:, None]
-BUS["bass"] = filt(BUS["bass"], lo=30, order=2)
-mix = BUS["keys"] + BUS["drums"] + BUS["bass"] * 0.7 + BUS["pad"] + wet * 0.3
+sc = np.ones(N)                                               # sidechain: pad / lead / sub duck on every kick
+k = 0
+while A0 + k * KICK_STEP < I0:
+    b = A0 + k * KICK_STEP; k += 1
+    if BREAK0 <= b < DROP or (b < C0 and b % 1): continue
+    i = int(T(b) * SR); n = min(int(0.25 * SR), N - i); e = np.arange(n) / SR
+    sc[i:i + n] = np.minimum(sc[i:i + n], 1 - 0.4 * np.exp(-e / 0.08))
+for bus in ("pad", "lead"): BUS[bus] *= sc[:, None]
+BUS["bass"] *= (0.5 + 0.5 * sc)[:, None]
+BUS["bass"] = filt(BUS["bass"], lo=28, order=2)
+mix = BUS["pad"] + BUS["lead"] * 1.2 + BUS["keys"] + BUS["drums"] + BUS["bass"] * 1.1 + BUS["fx"] + wet * 0.35
 mix = filt(mix, lo=28, order=2); mix += 0.9 * filt(mix, lo=2500, order=2)
 mix *= np.clip((DUR - tt) / 1.5, 0, 1)[:, None]
 rms = np.sqrt(np.mean(mix ** 2)); mix *= 10 ** (-15.0 / 20) / max(rms, 1e-9)
