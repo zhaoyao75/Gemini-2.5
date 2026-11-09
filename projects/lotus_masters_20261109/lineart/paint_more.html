@@ -158,13 +158,7 @@ const noise = (x, y) => Math.sin(x * 0.011 + Math.sin(y * 0.007) * 3) * Math.cos
       return null;
     };
     // melt: pixels below a sagging line are pulled downward in long drips
-    const drip = (x, y) => {
-      const start = 1040 + 40 * Math.sin(x * 0.02);
-      if (y < start || x < meta.vase.x0 + 10 || x > meta.vase.x1 - 10) return 0;
-      // a few long, narrow drips hanging from the sagging vase
-      const tongue = Math.pow(Math.max(0, Math.sin(x * 0.045 + 1.3)), 8) * 2.2 + Math.pow(Math.max(0, Math.sin(x * 0.017 - 0.4)), 10) * 1.6;
-      return (y - start) * (0.25 + tongue);
-    };
+    const drip = () => 0;     // the bowl stays whole; its melt is painted on top below
     const horizon = 980;
     fillPixels((x, y) => {
       // desert dream landscape
@@ -189,6 +183,16 @@ const noise = (x, y) => Math.sin(x * 0.011 + Math.sin(y * 0.007) * 3) * Math.cos
     ctx.fillStyle = 'rgba(40,20,10,0.35)'; ctx.fillRect(bx1, by0 + 10, 26, by1 - by0);
     // a soft watch draped over the block's edge (The Persistence of Memory)
     const cx = 830, cy = by0 - 6;
+    // porcelain glaze melting off the rim: long soft drips that slide down the bowl face and pool on the ground
+    [[330, 1135, 1300], [455, 1150, 1352], [610, 1150, 1330], [700, 1135, 1285]].forEach(([x, y0, y1]) => {
+      const w = 22; const g = ctx.createLinearGradient(x - w, 0, x + w, 0); g.addColorStop(0, '#6a82d0'); g.addColorStop(0.45, '#f4f2ee'); g.addColorStop(1, '#2a4aa8');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x - w, y0); ctx.lineTo(x - w * 0.6, y1 - 18); ctx.bezierCurveTo(x - w * 1.3, y1 + 22, x + w * 1.3, y1 + 22, x + w * 0.6, y1 - 18); ctx.lineTo(x + w, y0); ctx.fill();
+      ctx.strokeStyle = 'rgba(30,50,120,0.6)'; ctx.lineWidth = 2; ctx.stroke(); });
+    // Dali's crutch props up the bowl (a pole with a fork at the top, held by a bar)
+    ctx.strokeStyle = '#5a3a1e'; ctx.lineCap = 'round';
+    ctx.lineWidth = 12; ctx.beginPath(); ctx.moveTo(120, 1440); ctx.lineTo(262, 1262); ctx.stroke();
+    ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(228, 1280); ctx.lineTo(300, 1300); ctx.stroke();
+    ctx.lineWidth = 5; ctx.strokeStyle = '#8a6238'; ctx.beginPath(); ctx.moveTo(120, 1440); ctx.lineTo(262, 1262); ctx.stroke(); ctx.lineCap = 'butt';
     ctx.save(); ctx.translate(cx, cy);
     // the part hanging down the front face
     ctx.fillStyle = '#c8a850'; ctx.beginPath(); ctx.moveTo(-95, 0); ctx.bezierCurveTo(-100, 70, -60, 150, -20, 175); ctx.bezierCurveTo(10, 150, 40, 60, 70, 0); ctx.fill();
