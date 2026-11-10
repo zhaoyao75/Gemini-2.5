@@ -109,10 +109,14 @@ HOOK = [
 ]
 OUTRO = [(0, 76, 1), (1, 72, 1), (2, 69, 2)]
 
-# ---------- 0–1 s: title hit, the hook starts on the first note ----------
+# ---------- 0–1 s: a run-up that is already moving (808 pulse climbing into beat 4, kick, rising hats and a pluck run) ----------
 add("pad", strings(PAD["Am"], 1.8, cut=3200, att=0.02, rel=0.6), 0, gain=1.0)
-add("drums", kick(), 0, gain=0.95); add("drums", crash(), 0, gain=0.3); add("bass", sub808(45, 0.9), 0, gain=0.9)
-add("lead", epiano(76, 1.0), 0.0, pan=-0.1, gain=0.9); add("lead", epiano(74, 0.9), T(0) + 0.5, pan=-0.1, gain=0.85)
+add("drums", crash(), 0, gain=0.3)
+for i, m in enumerate((45, 45, 48, 52)): add("bass", sub808(m, 0.3, 1.0), i * 0.25, gain=0.95)           # 808 on every 16th-group of the second
+for i, m in enumerate((57, 60, 64, 69, 64, 69, 72, 76)): add("arp", pluck_saw(m, 0.14, 0.5 + 0.06 * i, cut=3600), i * 0.125, pan=-0.3 + 0.08 * i, gain=0.4)
+for i in (0, 4): add("drums", kick(), i * 0.125, gain=0.95)
+for i in range(8): add("drums", hat(), i * 0.125 + 0.06, pan=0.3, gain=0.1 + 0.03 * i)
+add("lead", epiano(76, 1.0), 0.0, pan=-0.1, gain=0.9); add("lead", epiano(74, 0.9), 0.5, pan=-0.1, gain=0.85)
 
 # ---------- the groove, bar by bar ----------
 bar = A0
@@ -126,12 +130,14 @@ while bar < OUT0:
         add("lead", epiano(m, max(0.5, ln * VBEAT * 1.4)), T(b), pan=-0.1, gain=0.9)
         if chorus: add("lead", bell(m + 12, 1.0, 0.5), T(b), pan=0.25, gain=0.25)
     # 808 bass: on every video beat in the verse, on the tresillo (0, .75, 1.5 | 2, 2.75, 3.5) in the chorus
-    hits = [0, .75, 1.5, 2, 2.75, 3.5] if chorus else [0, 1, 2, 3]
+    hits = [0, .75, 1.5, 2, 2.75, 3.25, 3.5] if chorus else [0, 1.5, 2, 3.5]
     for h in hits:
         b = bar + h
         if b >= end: continue
         low = BREAK0 <= b < DROP
-        add("bass", sub808(ROOT_NOTE[chord] + (12 if (chorus and h in (.75, 2.75)) else 0), 0.5), T(b), gain=0.55 if low else 0.85)
+        rn = ROOT_NOTE[chord] + (12 if (chorus and h in (.75, 2.75)) else 0)
+        add("bass", sub808(rn, 0.7), T(b), gain=0.6 if low else 1.0)
+        add("bass", pluck_saw(rn + 12, 0.28, 0.9, cut=650), T(b), gain=0.3 if low else 0.5)      # mid-bass layer (200–600 Hz) for phone speakers
     bar += 4
 
 # ---------- arpeggio, drums, build ----------
@@ -150,7 +156,7 @@ while A0 + k * STEP < OUT0:
         elif step % 2 == 1: add("drums", hat(), T(b), pan=-0.3, gain=0.1)
     else:
         if (k - 1) % 2 == 0: add("arp", pluck_saw(tones[((k - 1) // 2) % 4], 0.2, 0.6, cut=2200), T(b), pan=-0.2 + 0.1 * (((k - 1) // 2) % 4), gain=0.3)
-        if step in (0, 8): add("drums", kick(), T(b), gain=0.8)
+        if (step in (0, 8)) if b < SC["C_balloons"][0] else KICK[step]: add("drums", kick(), T(b), gain=0.85)
         if DEMBOW[step] and b >= A0 + 8: add("drums", clap(), T(b), pan=0.2, gain=0.22)
         if step % 4 == 2: add("drums", hat(), T(b), pan=0.3, gain=0.16)
         if b >= BUILD0 and step % 2 == 1: add("drums", hat(), T(b), pan=-0.2, gain=0.1 + 0.12 * (b - BUILD0) / (BREAK0 - BUILD0))      # rising hat roll into the break
@@ -180,7 +186,7 @@ BUS["lead"] = echo
 send = BUS["lead"] * 0.45 + BUS["keys"] * 0.4 + BUS["pad"] * 0.3 + BUS["fx"] * 0.3 + BUS["arp"] * 0.15
 nf = 1 << (N + irn - 1).bit_length()
 wet = np.stack([np.fft.irfft(np.fft.rfft(send[:, c], nf) * np.fft.rfft(ir[:, c], nf), nf)[:N] for c in range(2)], 1)
-mix = BUS["pad"] + BUS["lead"] * 1.15 + BUS["arp"] + BUS["keys"] + BUS["drums"] + BUS["bass"] * 1.1 + BUS["fx"] + wet * 0.3
+mix = BUS["pad"] * 0.85 + BUS["lead"] * 1.1 + BUS["arp"] + BUS["keys"] + BUS["drums"] + BUS["bass"] * 1.9 + BUS["fx"] + wet * 0.3
 mix = filt(mix, lo=30, order=2); mix += 0.9 * filt(mix, lo=2500, order=2)
 mix *= np.clip((DUR - tt) / 1.5, 0, 1)[:, None]
 rms = np.sqrt(np.mean(mix ** 2)); mix *= 10 ** (-15.0 / 20) / max(rms, 1e-9)
