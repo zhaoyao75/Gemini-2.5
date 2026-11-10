@@ -100,13 +100,12 @@ PROG = ["Am", "F", "C", "G"]
 PAD = {"Am": [45, 57, 60, 64], "F": [41, 57, 60, 65], "C": [48, 55, 60, 64], "G": [43, 55, 59, 62]}
 ARP = {"Am": [57, 60, 64, 69], "F": [57, 60, 65, 69], "C": [55, 60, 64, 67], "G": [55, 59, 62, 67]}      # chord tones around A3–A4 for the pluck arpeggio
 ROOT_NOTE = {"Am": 45, "F": 41, "C": 48, "G": 43}
-# hook on the tresillo 3+3+2 (offsets in video beats within a 4-beat bar): mostly long notes, mid register
-HOOK = [
-    [(0, 76, .75), (.75, 74, .75), (1.5, 72, .5), (2, 69, 1.5), (3.5, 71, .5)],
-    [(0, 72, .75), (.75, 69, .75), (1.5, 72, .5), (2, 65, 1.5), (3.5, 67, .5)],
-    [(0, 76, .75), (.75, 72, .75), (1.5, 76, .5), (2, 74, 1.5), (3.5, 72, .5)],
-    [(0, 74, .75), (.75, 71, .75), (1.5, 67, .5), (2, 71, .75), (2.75, 74, .75), (3.5, 72, .5)],
-]
+# the riff: ONE bar that comes back unchanged on every chord (A minor pentatonic fits Am / F / C / G), on the cinquillo E(5,8) rhythm
+# (offsets 0, .5, .75, 1.25, 1.5 in each half bar). Only the last bar of each 4-bar cycle ends differently, as a phrase mark.
+RIFF_A = [(0, 76, .5), (.5, 69, .25), (.75, 72, .5), (1.25, 76, .25), (1.5, 74, .5)]
+RIFF_B = [(2, 76, .5), (2.5, 69, .25), (2.75, 72, .5), (3.25, 74, .25), (3.5, 76, .5)]
+RIFF_END = [(2, 76, .5), (2.5, 69, .25), (2.75, 72, .5), (3.25, 76, 1.0)]
+HOOK = [RIFF_A + RIFF_B, RIFF_A + RIFF_B, RIFF_A + RIFF_B, RIFF_A + RIFF_END]
 OUTRO = [(0, 76, 1), (1, 72, 1), (2, 69, 2)]
 
 # ---------- 0–1 s: a run-up that is already moving (808 pulse climbing into beat 4, kick, rising hats and a pluck run) ----------
@@ -116,7 +115,7 @@ for i, m in enumerate((45, 45, 48, 52)): add("bass", sub808(m, 0.3, 1.0), i * 0.
 for i, m in enumerate((57, 60, 64, 69, 64, 69, 72, 76)): add("arp", pluck_saw(m, 0.14, 0.5 + 0.06 * i, cut=3600), i * 0.125, pan=-0.3 + 0.08 * i, gain=0.4)
 for i in (0, 4): add("drums", kick(), i * 0.125, gain=0.95)
 for i in range(8): add("drums", hat(), i * 0.125 + 0.06, pan=0.3, gain=0.1 + 0.03 * i)
-add("lead", epiano(76, 1.0), 0.0, pan=-0.1, gain=0.9); add("lead", epiano(74, 0.9), 0.5, pan=-0.1, gain=0.85)
+add("lead", epiano(76, 1.0), 0.0, pan=-0.1, gain=0.9); add("lead", pluck_saw(76, 0.32, 1.0, cut=3600), 0.0, gain=0.42); add("lead", epiano(69, 0.9), 0.5, pan=-0.1, gain=0.85)
 
 # ---------- the groove, bar by bar ----------
 bar = A0
@@ -127,7 +126,8 @@ while bar < OUT0:
     for off, m, ln in HOOK[bi]:
         b = bar + off
         if BREAK0 <= b < DROP or b >= OUT0: continue
-        add("lead", epiano(m, max(0.5, ln * VBEAT * 1.4)), T(b), pan=-0.1, gain=0.9)
+        add("lead", epiano(m, max(0.45, ln * VBEAT * 1.3)), T(b), pan=-0.1, gain=0.9)
+        add("lead", pluck_saw(m, 0.32, 1.0, cut=3600), T(b), pan=0.1, gain=0.42)      # bite, so the riff is what you remember
         if chorus: add("lead", bell(m + 12, 1.0, 0.5), T(b), pan=0.25, gain=0.25)
     # 808 bass: on every video beat in the verse, on the tresillo (0, .75, 1.5 | 2, 2.75, 3.5) in the chorus
     hits = [0, .75, 1.5, 2, 2.75, 3.25, 3.5] if chorus else [0, 1.5, 2, 3.5]
@@ -149,13 +149,13 @@ while A0 + k * STEP < OUT0:
     tones = ARP[chord]
     if chorus:
         idx = (k - 1) % 4
-        add("arp", pluck_saw(tones[idx] + (12 if (k - 1) % 8 >= 4 else 0), 0.16, 0.9 if (k - 1) % 4 == 0 else 0.55, cut=4200), T(b), pan=-0.3 + 0.15 * idx, gain=0.4)
+        add("arp", pluck_saw(tones[idx] + (12 if (k - 1) % 8 >= 4 else 0), 0.16, 0.9 if (k - 1) % 4 == 0 else 0.55, cut=4200), T(b), pan=-0.3 + 0.15 * idx, gain=0.24)
         if KICK[step]: add("drums", kick(), T(b), gain=0.95)
         if DEMBOW[step]: add("drums", clap(), T(b), pan=0.1, gain=0.42)
         if HATS[step]: add("drums", hat(), T(b), pan=0.3, gain=0.3)
         elif step % 2 == 1: add("drums", hat(), T(b), pan=-0.3, gain=0.1)
     else:
-        if (k - 1) % 2 == 0: add("arp", pluck_saw(tones[((k - 1) // 2) % 4], 0.2, 0.6, cut=2200), T(b), pan=-0.2 + 0.1 * (((k - 1) // 2) % 4), gain=0.3)
+        if (k - 1) % 2 == 0: add("arp", pluck_saw(tones[((k - 1) // 2) % 4], 0.2, 0.6, cut=2200), T(b), pan=-0.2 + 0.1 * (((k - 1) // 2) % 4), gain=0.18)
         if (step in (0, 8)) if b < SC["C_balloons"][0] else KICK[step]: add("drums", kick(), T(b), gain=0.85)
         if DEMBOW[step] and b >= A0 + 8: add("drums", clap(), T(b), pan=0.2, gain=0.22)
         if step % 4 == 2: add("drums", hat(), T(b), pan=0.3, gain=0.16)
