@@ -1,12 +1,12 @@
-"""Music for 《美国中期选举一次看懂》 — Hans Zimmer-style techniques, an ORIGINAL theme (no melody is taken from any film score).
-Techniques borrowed (all from published analyses of Interstellar / Inception / The Dark Knight / Cornfield Chase):
-  pedal point   a held E (the dominant of A minor) under the whole verse, so nothing resolves; the bass only moves to the chord roots at the drop
-  ticking ostinato   a repeated E4 in eighths, then sixteenths with a cinquillo accent — the election-night counting clock
-  a four-note theme   E4 – A4 – C5 – D5, a quarter note apiece, said twice per bar on every chord (it fits Am | F | C | G); cello + pluck in the verse, octave + brass + bell added at the drop
-  low toms     an insistent low drum pulse instead of a pop drum kit in the verse
-  long crescendo   everything swells from beat 4 to the drop on beat 44 (the Senate scale tips), then the pedal releases and the whole band comes in
-  outro   the theme once on a solo piano, ending on an open chord
-(Earlier versions are kept: bgm_bright_g.py, bgm_aminor_v1.py, bgm_bass_v2.py, bgm_riff_v3.py.)
+"""Music for 《美国中期选举一次看懂》 — a political-thriller feel in the spirit of House of Cards. An ORIGINAL piece (no melody is taken from the score).
+From published interviews (Jeff Beal, Song Exploder / 99% Invisible / Slate): built from sketches, dark and driving, layered so it does not tire the ear,
+a heavier cello in season 2, jazz roots. Used here as a mood, plus one classic dark-drama device:
+  lament bass     the bass walks down chromatically  A – G – F# – F – E  (one step per bar) while the upper chord tones A–C–E stay put; the E is the unresolved dominant
+  melody          a long-short-long phrase that is repeated a step lower on each bar of the descent (E-D-C | D-C-B | C-B-A | B-A-G# | G#-B-E), solo cello with a violin line on top
+  drive           a staccato low-string pulse in eighths (sixteenths in the chorus) over a sub bass, so it is moving from the first second
+  layers          the pulse, then toms, then violins, then the full band; the build before the drop, then the release lands on Am at beat 44
+  outro           the cello alone, the phrase once, held on E
+(Earlier versions are kept as bgm_*.py.)
 """
 import json, os, wave
 from pathlib import Path
@@ -92,102 +92,88 @@ def hat(open_=False):
 def crash():
     n = int(2.6 * SR); t = np.arange(n) / SR; c = filt(rng.standard_normal((n, 2)), lo=3500); return c / np.abs(c).max() * np.exp(-t * 1.5)[:, None]
 
-PROG = ["Am", "F", "C", "G"]
-PAD = {"Am": [45, 57, 60, 64], "F": [41, 57, 60, 65], "C": [48, 55, 60, 64], "G": [43, 55, 59, 62]}
-ARP = {"Am": [57, 60, 64, 69], "F": [57, 60, 65, 69], "C": [55, 60, 64, 67], "G": [55, 59, 62, 67]}      # chord tones around A3–A4 for the pluck arpeggio
-ROOT_NOTE = {"Am": 45, "F": 41, "C": 48, "G": 43}
-MOTIF = [(0, 64, .5), (.5, 69, .5), (1, 72, .5), (1.5, 74, .5)]      # E4 A4 C5 D5: up a fourth, a minor third, a tone — and it stays hanging on D
-THEME = []
-for _bi in range(4):                                                   # the same four notes on every chord; twice per bar; the last bar of a cycle holds the final D
-    for _rep in (0, 2):
-        for _off, _m, _ln in MOTIF:
-            THEME.append((_bi, _rep + _off, _m, (1.0 if (_bi == 3 and _rep == 2 and _m == 74) else _ln)))
+# 5-chord cycle (10 bars = 40 beats from beat 4 to the drop, so the cycle restarts on Am exactly at beat 44)
+CYC = ["Am", "Am/G", "F#m7b5", "Fmaj7", "E"]
+BASS_NOTE = {"Am": 45, "Am/G": 43, "F#m7b5": 42, "Fmaj7": 41, "E": 40}
+UPPER = {"Am": [57, 60, 64], "Am/G": [57, 60, 64], "F#m7b5": [57, 60, 64], "Fmaj7": [57, 60, 64], "E": [56, 59, 64]}
+# the phrase: (offset in video beats, MIDI, length) — long, short, long; moved down a step each bar
+PHRASE = {"Am": [(0, 76, 1.5), (1.5, 74, .5), (2, 72, 2.0)], "Am/G": [(0, 74, 1.5), (1.5, 72, .5), (2, 71, 2.0)],
+          "F#m7b5": [(0, 72, 1.5), (1.5, 71, .5), (2, 69, 2.0)], "Fmaj7": [(0, 71, 1.5), (1.5, 69, .5), (2, 68, 2.0)], "E": [(0, 68, 1.5), (1.5, 71, .5), (2, 76, 2.0)]}
 def level(b, pts):
     xs, ys = zip(*pts); return float(np.interp(b, xs, ys))
-CRES = [(0, 1.0), (A0, 0.95), (DROP - 3, 1.12), (DROP, 1.12), (OUT0, 1.0), (TOTAL, 0.85)]      # a gentle swell, not a film-sized one (background music: small level swings)    # the long crescendo
-def cello(m, dur, vel=1.0, cut=1700, att=0.04):
-    n = int(dur * SR); t = np.arange(n) / SR; f = hz(m) * (1 + 0.004 * np.sin(2 * np.pi * 5.2 * t) * np.clip((t - 0.15) / 0.4, 0, 1))
+CRES = [(0, 1.0), (A0, 0.95), (DROP - 3, 1.1), (DROP, 1.1), (OUT0, 1.0), (TOTAL, 0.85)]
+def cello(m, dur, vel=1.0, cut=2200, att=0.1):
+    n = int(dur * SR); t = np.arange(n) / SR; f = hz(m) * (1 + 0.005 * np.sin(2 * np.pi * 5.4 * t) * np.clip((t - 0.2) / 0.4, 0, 1))
     s = sum(2 * np.mod(np.cumsum(f * 2 ** (d / 12)) / SR, 1) - 1 for d in (-0.07, 0.0, 0.07))
-    return filt(s, hi=cut, order=2) * env(n, att, 0.22) * vel / 3
+    return filt(s, hi=cut, order=2) * env(n, att, 0.3) * vel / 3
 def tom(f0=92, dur=0.5, vel=1.0):
     n = int(dur * SR); t = np.arange(n) / SR
     return np.sin(2 * np.pi * np.cumsum(f0 * (1 + 0.55 * np.exp(-t * 16))) / SR) * np.exp(-t * 6.0) * env(n, 0.002, 0.08) * vel
-def tick(m=76, vel=1.0):
-    return pluck_saw(m, 0.11, vel, cut=2000)
+def spic(m, vel=1.0, dur=0.16):                              # staccato low-string stab
+    return pluck_saw(m, dur, vel, cut=900)
 
-# ---------- 0–1 s: moving at once — drone swell, ticking sixteenths, a low tom, the first cello note of the theme ----------
-add("pad", strings([40, 52, 57], 1.8, cut=1800, att=0.05, rel=0.6), 0, gain=0.9)
+# ---------- 0–1 s: moving at once — a staccato pulse on A, a low tom, a string swell, the first cello note ----------
+add("pad", strings([45, 57, 60, 64], 1.8, cut=1800, att=0.05, rel=0.6), 0, gain=0.9)
 add("drums", crash(), 0, gain=0.3); add("drums", kick(), 0, gain=1.0); add("drums", tom(88, 0.7), 0.25, gain=1.3); add("drums", tom(110, 0.5), 0.5, gain=1.2); add("drums", kick(), 0.5, gain=0.9); add("drums", tom(130, 0.3), 0.75, gain=1.1)
-for i in range(8): add("arp", tick(64, 0.6 + 0.07 * i), i * 0.125, pan=-0.15, gain=0.75)
-add("bass", sub808(40, 1.0), 0, gain=1.3); add("bass", sub808(45, 0.4), 0.5, gain=1.0)
-add("lead", cello(64, 1.4, 1.0), 0.0, gain=1.6)
+for i in range(8): add("arp", spic(57 if i % 2 == 0 else 45, 0.7 + 0.05 * i), i * 0.125, pan=-0.1, gain=0.8)
+add("bass", sub808(45, 1.0), 0, gain=0.95); add("bass", sub808(45, 0.4), 0.5, gain=0.7)
+add("lead", cello(76, 1.4, 1.0), 0.0, gain=1.6)
 
-# ---------- the arrangement, bar by bar ----------
-bar = A0
+# ---------- the arrangement ----------
+bar = A0; n_bar = 0
 while bar < OUT0:
-    bi = ((bar - A0) // 4) % 4; chord = PROG[bi]; end = min(bar + 4, OUT0)
-    chorus = bar >= DROP; lv = level(bar, CRES)
-    add("pad", strings(PAD[chord], (end - bar) * VBEAT + 0.5, cut=1500 if not chorus else 2600, att=0.4), T(bar), gain=0.5 * lv)
-    # the theme: cello in the verse; at the drop add the octave above (violins), the octave below (brass) and a bell
-    for (tb, off, m, ln) in THEME:
-        if tb != bi: continue
+    chord = CYC[((bar - A0) // 4) % 5]; end = min(bar + 4, OUT0); chorus = bar >= DROP; lv = level(bar, CRES)
+    add("pad", strings(UPPER[chord], (end - bar) * VBEAT + 0.5, cut=1500 if not chorus else 2600, att=0.4), T(bar), gain=0.55 * lv)
+    # melody: solo cello; violins an octave up join after 4 bars; at the drop add the lower octave (celli/brass) and a bell
+    for off, m, ln in PHRASE[chord]:
         b = bar + off
         if BREAK0 <= b < DROP or b >= OUT0: continue
-        add("lead", epiano(m, ln * VBEAT * 1.6 + 0.3, 1.0), T(b), pan=-0.05, gain=2.0 * lv)                  # the voice you hear
-        add("lead", pluck_saw(m, 0.32, 1.0, cut=4200), T(b), pan=0.1, gain=0.9 * lv)                           # bite
-        add("lead", cello(m, ln * VBEAT + 0.15, 1.0), T(b), pan=-0.05, gain=0.7 * lv)                           # body
-        add("keys", bell(m + 12, 0.9, 0.6), T(b), pan=0.25, gain=0.35 * lv)                                    # sparkle, an octave up
+        add("lead", cello(m, ln * VBEAT + 0.3, 1.0), T(b), pan=-0.05, gain=2.0 * lv)
+        add("lead", pluck_saw(m, 0.28, 1.0, cut=3600), T(b), pan=0.1, gain=0.45 * lv)                          # a little bow-attack bite
+        if b >= A0 + 16: add("lead", cello(m + 12, ln * VBEAT + 0.3, 0.8, cut=3400, att=0.16), T(b), pan=0.25, gain=1.2 * lv)   # violins
         if chorus:
-            add("lead", cello(m + 12, ln * VBEAT + 0.3, 0.7, cut=3200), T(b), pan=0.2, gain=0.55 * lv)
-            add("lead", cello(m - 12, ln * VBEAT + 0.3, 0.8, cut=1100), T(b), pan=-0.2, gain=0.5 * lv)
-            add("keys", bell(m + 12, 1.2, 0.5), T(b), pan=0.25, gain=0.2)
-    # bass: a held E (pedal) pulsing on every video beat until the drop, then the real chord roots on the tresillo
-    if not chorus:
-        for h in range(int(end - bar)):
-            b = bar + h
-            add("bass", sub808(40, 0.8), T(b), gain=1.15 * lv * (0.6 if BREAK0 <= b < DROP else 1.0)); add("bass", pluck_saw(40, 0.3, 0.8, cut=400), T(b), gain=0.25 * lv)
-    else:
-        for h in (0, .75, 1.5, 2, 2.75, 3.25, 3.5):
-            b = bar + h
-            if b >= end: continue
-            rn = ROOT_NOTE[chord] + (12 if h in (.75, 2.75) else 0)
-            add("bass", sub808(rn, 0.7), T(b), gain=1.0); add("bass", pluck_saw(rn + 12, 0.28, 0.9, cut=650), T(b), gain=0.5)
+            add("lead", cello(m - 12, ln * VBEAT + 0.3, 0.9, cut=1300), T(b), pan=-0.25, gain=1.2 * lv)
+            add("keys", bell(m + 12, 1.3, 0.6), T(b), pan=0.25, gain=0.3)
+    # sub bass: down the lament line, on every video beat (verse) / the tresillo (chorus)
+    hits = [0, .75, 1.5, 2, 2.75, 3.25, 3.5] if chorus else [0, 1, 2, 3]
+    for h in hits:
+        b = bar + h
+        if b >= end: continue
+        add("bass", sub808(BASS_NOTE[chord], 0.7), T(b), gain=(0.4 if BREAK0 <= b < DROP else 0.7))
     bar += 4
 
-# ---------- ticking ostinato, toms, drums, build ----------
+# staccato low-string pulse, toms, drums and the build
 k = 0
 while A0 + k * STEP < OUT0:
-    b = A0 + k * STEP; step = k % 16; chord = PROG[(int(b - A0) // 4) % 4]; chorus = b >= DROP; brk = BREAK0 <= b < DROP; lv = level(b, CRES); k += 1
+    b = A0 + k * STEP; step = k % 16; chord = CYC[(int(b - A0) // 4) % 5]; chorus = b >= DROP; brk = BREAK0 <= b < DROP; lv = level(b, CRES); k += 1
     if brk: continue
-    acc = step in (0, 4, 6, 10, 12)                       # cinquillo accent
+    root = BASS_NOTE[chord]; acc = step in (0, 4, 6, 10, 12)
     if chorus:
-        add("arp", tick(76, 0.9 if acc else 0.5), T(b), pan=-0.15, gain=0.2 * lv)
-        if KICK[step]: add("drums", kick(), T(b), gain=0.95)
-        if DEMBOW[step]: add("drums", tom(150, 0.3, 0.8), T(b), pan=0.1, gain=0.55)
-        if step in (3, 11): add("drums", clap(), T(b), gain=0.3)
-        if HATS[step]: add("drums", hat(), T(b), pan=0.3, gain=0.22)
+        add("arp", spic(root + 12, 0.95 if acc else 0.5), T(b), pan=-0.1, gain=0.4 * lv)
+        if KICK[step]: add("drums", kick(), T(b), gain=0.9)
+        if DEMBOW[step]: add("drums", tom(150, 0.3, 0.8), T(b), pan=0.1, gain=0.5)
+        if HATS[step]: add("drums", hat(), T(b), pan=0.3, gain=0.18)
     else:
-        sixteenth = b >= SC["D_before"][0] - 10            # eighths first, sixteenths from beat 20
-        if sixteenth or step % 2 == 0: add("arp", tick(76, (0.9 if acc else 0.5) if sixteenth else (0.9 if step % 4 == 0 else 0.55)), T(b), pan=-0.15, gain=0.26 * lv)
-        if step in (0, 8): add("drums", tom(92 if step == 0 else 110, 0.5, 0.9), T(b), gain=1.2 * lv)
-        if step in (0, 8): add("drums", kick(), T(b), gain=0.7)
+        if step % 2 == 0: add("arp", spic(root + 12, 0.95 if step % 4 == 0 else 0.55), T(b), pan=-0.1, gain=0.42 * lv)
+        if b >= A0 + 8 and step % 2 == 1: add("arp", spic(root + 24, 0.3), T(b), pan=0.15, gain=0.25 * lv)          # a second, higher stab layer enters after two bars
+        if step in (0, 8): add("drums", tom(92 if step == 0 else 110, 0.5, 0.9), T(b), gain=1.1 * lv)
+        if step in (0, 8) and b >= A0 + 8: add("drums", kick(), T(b), gain=0.6)
         if b >= BUILD0 and step % 2 == 1: add("drums", hat(), T(b), pan=-0.2, gain=0.08 + 0.14 * (b - BUILD0) / (BREAK0 - BUILD0))
         if b >= BUILD0 + 2 and step % 4 == 2: add("drums", tom(130, 0.25, 0.7), T(b), gain=0.4 + 0.5 * (b - BUILD0) / (BREAK0 - BUILD0))
-# riser and the release
 nb = int((T(DROP) - T(BREAK0)) * SR); u = np.arange(nb) / nb
 nz = filt(rng.standard_normal((nb, 2)), lo=1800) * (u ** 2)[:, None]
 sweep = np.sin(2 * np.pi * np.cumsum(220 + 1500 * u ** 2) / SR) * (u ** 2)
 add("fx", nz / np.abs(nz).max(), T(BREAK0), gain=0.3); add("fx", sweep, T(BREAK0), gain=0.1)
 add("drums", crash(), T(DROP), gain=0.6); add("drums", kick(), T(DROP), gain=1.1); add("drums", tom(70, 0.9, 1.0), T(DROP), gain=0.9)
-add("bass", sub808(33, 1.4, 1.0), T(DROP), gain=0.75); add("keys", bell(81, 2.2, 1.0), T(DROP), pan=0.2, gain=0.22)
+add("bass", sub808(33, 1.4, 1.0), T(DROP), gain=0.55); add("keys", bell(81, 2.2, 1.0), T(DROP), pan=0.2, gain=0.22)
 
-# ---------- outro: the theme once on a solo piano, an open chord underneath ----------
-for _i in range(2):
-    for _k, _m in enumerate((64, 69, 72, 74)): add("lead", epiano(_m, 1.6 * VBEAT + 0.8), T(OUT0 + _i * 4 + _k), pan=-0.05, gain=0.8)
-add("pad", strings(PAD["Am"], 4 * VBEAT + 0.6, cut=2000, att=0.3), T(OUT0), gain=0.8)
+# ---------- outro: the cello alone, the phrase once, held on E ----------
+for off, m, ln in PHRASE["Am"][:2] + [(2, 72, 1.5)]:
+    add("lead", cello(m, ln * VBEAT * 1.4 + 0.5, 1.0), T(OUT0 + off), pan=-0.05, gain=1.6)
+add("lead", cello(76, 4 * VBEAT + 1.6, 1.0, att=0.3), T(OUT0 + 4), pan=-0.05, gain=1.4)
+add("pad", strings(UPPER["Am"], 4 * VBEAT + 0.6, cut=2000, att=0.3), T(OUT0), gain=0.8)
 add("pad", strings([40, 52, 57, 64, 71], (TOTAL - OUT0 - 4) * VBEAT + 1.4, cut=2200, att=0.4, rel=1.3), T(OUT0 + 4), gain=0.9)
 add("bass", sub808(45, 3.0), T(OUT0), gain=0.7); add("bass", sub808(40, 3.2), T(OUT0 + 4), gain=0.55)
-add("keys", bell(88, 3.0, 1.0), T(OUT0 + 4), pan=0.2, gain=0.18)
 
 # ---------- mix ----------
 irn = int(1.3 * SR); it = np.arange(irn) / SR
@@ -200,7 +186,7 @@ BUS["lead"] = echo
 send = BUS["lead"] * 0.45 + BUS["keys"] * 0.4 + BUS["pad"] * 0.3 + BUS["fx"] * 0.3 + BUS["arp"] * 0.15
 nf = 1 << (N + irn - 1).bit_length()
 wet = np.stack([np.fft.irfft(np.fft.rfft(send[:, c], nf) * np.fft.rfft(ir[:, c], nf), nf)[:N] for c in range(2)], 1)
-LM = 0.21                                   # melody level: chosen so it sits ~4 dB above everything else in 250–3000 Hz (clear, but the bass keeps its share)
+LM = 0.18                                   # melody level: chosen so it sits ~4 dB above everything else in 250–3000 Hz (clear, but the bass keeps its share)
 LEAD_PRES = filt(BUS["lead"], lo=1200, hi=4800, order=2)
 mix = BUS["pad"] * 0.85 + (BUS["lead"] * 1.5 + LEAD_PRES * 0.7) * LM + BUS["arp"] + BUS["keys"] + BUS["drums"] + BUS["bass"] * 1.9 + BUS["fx"] + wet * 0.3
 mix = filt(mix, lo=30, order=2); mix += 0.9 * filt(mix, lo=2500, order=2)
