@@ -2,7 +2,7 @@
 Techniques borrowed (all from published analyses of Interstellar / Inception / The Dark Knight / Cornfield Chase):
   pedal point   a held E (the dominant of A minor) under the whole verse, so nothing resolves; the bass only moves to the chord roots at the drop
   ticking ostinato   a repeated E4 in eighths, then sixteenths with a cinquillo accent — the election-night counting clock
-  a very simple theme   long notes, rising: E4 – A4 – C5 – B4 | E5 – D5 – C5 | B4 – D5, on Am | F | C | G; cello in the verse, octave + brass + bell added at the drop
+  a four-note theme   E4 – A4 – C5 – D5, a quarter note apiece, said twice per bar on every chord (it fits Am | F | C | G); cello + pluck in the verse, octave + brass + bell added at the drop
   low toms     an insistent low drum pulse instead of a pop drum kit in the verse
   long crescendo   everything swells from beat 4 to the drop on beat 44 (the Senate scale tips), then the pedal releases and the whole band comes in
   outro   the theme once on a solo piano, ending on an open chord
@@ -96,19 +96,19 @@ PROG = ["Am", "F", "C", "G"]
 PAD = {"Am": [45, 57, 60, 64], "F": [41, 57, 60, 65], "C": [48, 55, 60, 64], "G": [43, 55, 59, 62]}
 ARP = {"Am": [57, 60, 64, 69], "F": [57, 60, 65, 69], "C": [55, 60, 64, 67], "G": [55, 59, 62, 67]}      # chord tones around A3–A4 for the pluck arpeggio
 ROOT_NOTE = {"Am": 45, "F": 41, "C": 48, "G": 43}
-THEME = [   # (bar index, offset in video beats, MIDI, length in video beats): a slow rising line, long notes
-    (0, 0, 64, 2.0), (0, 2, 69, 2.0),
-    (1, 0, 72, 3.0), (1, 3, 71, 1.0),
-    (2, 0, 76, 2.0), (2, 2, 74, 1.0), (2, 3, 72, 1.0),
-    (3, 0, 71, 2.0), (3, 2, 74, 2.0),
-]
+MOTIF = [(0, 64, .5), (.5, 69, .5), (1, 72, .5), (1.5, 74, .5)]      # E4 A4 C5 D5: up a fourth, a minor third, a tone — and it stays hanging on D
+THEME = []
+for _bi in range(4):                                                   # the same four notes on every chord; twice per bar; the last bar of a cycle holds the final D
+    for _rep in (0, 2):
+        for _off, _m, _ln in MOTIF:
+            THEME.append((_bi, _rep + _off, _m, (1.0 if (_bi == 3 and _rep == 2 and _m == 74) else _ln)))
 def level(b, pts):
     xs, ys = zip(*pts); return float(np.interp(b, xs, ys))
 CRES = [(0, 1.0), (A0, 0.95), (DROP - 3, 1.12), (DROP, 1.12), (OUT0, 1.0), (TOTAL, 0.85)]      # a gentle swell, not a film-sized one (background music: small level swings)    # the long crescendo
-def cello(m, dur, vel=1.0, cut=1700):
+def cello(m, dur, vel=1.0, cut=1700, att=0.04):
     n = int(dur * SR); t = np.arange(n) / SR; f = hz(m) * (1 + 0.004 * np.sin(2 * np.pi * 5.2 * t) * np.clip((t - 0.15) / 0.4, 0, 1))
     s = sum(2 * np.mod(np.cumsum(f * 2 ** (d / 12)) / SR, 1) - 1 for d in (-0.07, 0.0, 0.07))
-    return filt(s, hi=cut, order=2) * env(n, 0.14, 0.3) * vel / 3
+    return filt(s, hi=cut, order=2) * env(n, att, 0.22) * vel / 3
 def tom(f0=92, dur=0.5, vel=1.0):
     n = int(dur * SR); t = np.arange(n) / SR
     return np.sin(2 * np.pi * np.cumsum(f0 * (1 + 0.55 * np.exp(-t * 16))) / SR) * np.exp(-t * 6.0) * env(n, 0.002, 0.08) * vel
@@ -133,7 +133,8 @@ while bar < OUT0:
         if tb != bi: continue
         b = bar + off
         if BREAK0 <= b < DROP or b >= OUT0: continue
-        add("lead", cello(m, ln * VBEAT + 0.3, 1.0), T(b), pan=-0.05, gain=1.5 * lv)
+        add("lead", cello(m, ln * VBEAT + 0.15, 1.0), T(b), pan=-0.05, gain=1.5 * lv)
+        add("lead", pluck_saw(m, 0.3, 1.0, cut=3200), T(b), pan=0.1, gain=0.4 * lv)
         if chorus:
             add("lead", cello(m + 12, ln * VBEAT + 0.3, 0.7, cut=3200), T(b), pan=0.2, gain=0.55 * lv)
             add("lead", cello(m - 12, ln * VBEAT + 0.3, 0.8, cut=1100), T(b), pan=-0.2, gain=0.5 * lv)
@@ -179,9 +180,8 @@ add("drums", crash(), T(DROP), gain=0.6); add("drums", kick(), T(DROP), gain=1.1
 add("bass", sub808(33, 1.4, 1.0), T(DROP), gain=0.75); add("keys", bell(81, 2.2, 1.0), T(DROP), pan=0.2, gain=0.22)
 
 # ---------- outro: the theme once on a solo piano, an open chord underneath ----------
-for (tb, off, m, ln) in THEME:
-    b = OUT0 + tb * 2 + off * 0.5
-    if b < TOTAL - 0.5: add("lead", epiano(m + 12 if m < 69 else m, ln * VBEAT * 0.5 * 2.2 + 0.8), T(b), pan=-0.05, gain=0.8)
+for _i in range(2):
+    for _k, _m in enumerate((64, 69, 72, 74)): add("lead", epiano(_m, 1.6 * VBEAT + 0.8), T(OUT0 + _i * 4 + _k), pan=-0.05, gain=0.8)
 add("pad", strings(PAD["Am"], 4 * VBEAT + 0.6, cut=2000, att=0.3), T(OUT0), gain=0.8)
 add("pad", strings([40, 52, 57, 64, 71], (TOTAL - OUT0 - 4) * VBEAT + 1.4, cut=2200, att=0.4, rel=1.3), T(OUT0 + 4), gain=0.9)
 add("bass", sub808(45, 3.0), T(OUT0), gain=0.7); add("bass", sub808(40, 3.2), T(OUT0 + 4), gain=0.55)
