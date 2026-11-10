@@ -94,7 +94,7 @@ function draw() {
     glow(250, 1050, 520, EL, 0.38); glow(830, 1050, 520, DK, 0.38);
     outlined('美国中期', 540, 280, 200, '#ffffff', '#000', 18, 'rgba(255,255,255,0.35)');
     outlined('选举', 540, 510, 250, '#fff200', '#000', 20, 'rgba(255,230,0,0.45)');
-    pill(540, 580, 700, 104, 62, '一次看懂');
+    pill(540, 580, 700, 104, 62, '驴象之争');
     elephant(250, 1240, 1.95, { t: 0.3, trunk: 1, mood: 0 });
     donkey(822, 1240, 1.85, { t: 0.5, mood: 0 });
     spark(540, 1010, 46);
@@ -108,12 +108,12 @@ function draw() {
     elephant(235, 990, 1.95, { t: 0.3, trunk: 1, mood: 0 });
     donkey(1170, 990, 1.9, { t: 0.5, mood: 0 });
     spark(W / 2, 640, 40);
-    pill(W / 2, 700, 300, 92, 48, '一次看懂');
+    pill(W / 2, 700, 300, 92, 48, '驴象之争');
     ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', W / 2, 1050); ctx.restore();
   }
 }
 window.ready = (async () => {
-  const sample = '美国中期选举一次看懂@比特双子';
+  const sample = '美国中期选举驴象之争一次看懂@比特双子';
   await Promise.all([document.fonts.load(`900 100px ${SANS}`, sample), document.fonts.load(`700 26px ${SANS}`, sample)]);
   await document.fonts.ready; draw(); return true;
 })();
