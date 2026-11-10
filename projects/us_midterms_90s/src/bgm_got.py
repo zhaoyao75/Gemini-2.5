@@ -124,9 +124,9 @@ def spic(m, vel=1.0, dur=0.16): return pluck_saw(m, dur, vel, cut=1400)
 
 # ---------- 0–1 s: already galloping — the Dm ostinato, a tom, the first cello leap ----------
 add("pad", strings(PAD["Dm"], 1.8, cut=1800, att=0.05, rel=0.6), 0, gain=0.9)
-add("drums", crash(), 0, gain=0.3); add("drums", kick(), 0, gain=1.0); add("drums", tom(88, 0.7), 0.0, gain=1.3); add("drums", tom(110, 0.5), 0.5, gain=1.2)
-for i in range(6): add("arp", spic(OST["Dm"][i], 0.7 + 0.06 * i), i / 6, pan=-0.1, gain=0.9)
-add("bass", sub808(38, 1.0), 0, gain=0.95); add("bass", sub808(38, 0.4), 0.5, gain=0.7)
+add("drums", crash(), 0, gain=0.08); add("drums", kick(), 0, gain=0.32); add("drums", tom(88, 0.7), 0.0, gain=0.42); add("drums", tom(110, 0.5), 0.5, gain=0.38)      # opening drums kept soft
+for i in range(6): add("arp", spic(OST["Dm"][i], 0.7 + 0.06 * i), i / 6, pan=-0.1, gain=0.42)
+add("bass", sub808(38, 1.0), 0, gain=0.6); add("bass", sub808(38, 0.4), 0.5, gain=0.45)
 add("lead", cello(62, 0.5, 1.0), 0.0, gain=1.8); add("lead", cello(70, 0.9, 1.0), 0.5, gain=1.8)
 
 # ---------- the arrangement ----------
@@ -167,8 +167,9 @@ while A0 + k * STEP3 < OUT0:
     else:
         add("arp", spic(note, 0.95 if acc else 0.5), T(b), pan=-0.1, gain=0.45 * lv)
         if b >= A0 + 8 and iu in (1, 4): add("arp", spic(note + 12, 0.3), T(b), pan=0.15, gain=0.22 * lv)
-        if iu in (0, 3): add("drums", tom(92 if iu == 0 else 110, 0.5, 0.9), T(b), gain=1.1 * lv)
-        if iu == 0 and b >= A0 + 8: add("drums", kick(), T(b), gain=0.6)
+        ramp = level(b, [(A0, 0.5), (A0 + 16, 1.0)])                       # the early toms come in gently and grow
+        if iu in (0, 3): add("drums", tom(92 if iu == 0 else 110, 0.5, 0.9), T(b), gain=1.1 * lv * ramp)
+        if iu == 0 and b >= A0 + 8: add("drums", kick(), T(b), gain=0.6 * ramp)
         if b >= BUILD0:
             add("drums", hat(), T(b), pan=-0.2, gain=0.08 + 0.14 * (b - BUILD0) / (BREAK0 - BUILD0))
             if iu in (4, 5): add("drums", tom(130, 0.25, 0.7), T(b), gain=0.4 + 0.5 * (b - BUILD0) / (BREAK0 - BUILD0))
@@ -206,6 +207,9 @@ mix *= np.clip((DUR - tt) / 1.5, 0, 1)[:, None]
 rms = np.sqrt(np.mean(mix ** 2)); mix *= 10 ** (-15.0 / 20) / max(rms, 1e-9)
 ceil = 10 ** (-1 / 20)
 mix = np.where(np.abs(mix) < 0.7 * ceil, mix, np.sign(mix) * (0.7 * ceil + 0.3 * ceil * np.tanh((np.abs(mix) - 0.7 * ceil) / (0.3 * ceil))))
+def _rms(x, t0, t1):
+    seg = x[int(t0 * SR):int(t1 * SR)]; return 20 * np.log10(np.sqrt(np.mean(seg ** 2)) + 1e-9)
+print("bus level, first 1 s | 1–8 s (dB, before the final gain):", {k: (round(_rms(v, 0, 1), 1), round(_rms(v, 1, 8), 1)) for k, v in BUS.items()})
 def _band(x, lo=250, hi=3000):
     m = x.mean(axis=1); X = np.abs(np.fft.rfft(m)) ** 2; f = np.fft.rfftfreq(len(m), 1 / SR); return X[(f >= lo) & (f < hi)].sum()
 _others = sum(_band(BUS[k]) for k in ("pad", "arp", "keys", "drums", "bass", "fx")); _lead = _band((BUS["lead"] * 1.5 + LEAD_PRES * 0.7) * LM)
