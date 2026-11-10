@@ -92,28 +92,26 @@ function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   if (!WIDE) {
     glow(250, 1050, 520, EL, 0.38); glow(830, 1050, 520, DK, 0.38);
-    outlined('美国中期', 540, 280, 200, '#ffffff', '#000', 18, 'rgba(255,255,255,0.35)');
-    outlined('选举', 540, 510, 250, '#fff200', '#000', 20, 'rgba(255,230,0,0.45)');
-    pill(540, 580, 700, 104, 62, '驴象之争');
+    outlined('美国中期选举', 540, 235, 158, '#ffffff', '#000', 16, 'rgba(255,255,255,0.35)');
+    outlined('驴象之争', 540, 470, 232, '#fff200', '#000', 20, 'rgba(255,230,0,0.45)');
+    pill(540, 560, 780, 104, 62, '花落谁家？');
     elephant(250, 1240, 1.95, { t: 0.3, trunk: 1, mood: 0 });
     donkey(822, 1240, 1.85, { t: 0.5, mood: 0 });
     spark(540, 1010, 46);
     ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', 540, 1412); ctx.restore();
   } else {
     glow(300, 760, 520, EL, 0.38); glow(1140, 760, 520, DK, 0.38);
-    ctx.font = `900 170px ${SANS}`; const w1 = ctx.measureText('美国中期').width; ctx.font = `900 210px ${SANS}`; const w2 = ctx.measureText('选举').width;
-    const x0 = (W - (w1 + w2 + 20)) / 2;
-    outlined('美国中期', x0, 270, 170, '#ffffff', '#000', 18, 'rgba(255,255,255,0.35)', 'left');
-    outlined('选举', x0 + w1 + 20, 270, 210, '#fff200', '#000', 20, 'rgba(255,230,0,0.45)', 'left');
+    outlined('美国中期选举', W / 2, 190, 128, '#ffffff', '#000', 14, 'rgba(255,255,255,0.35)');
+    outlined('驴象之争', W / 2, 400, 210, '#fff200', '#000', 18, 'rgba(255,230,0,0.45)');
+    pill(W / 2, 450, 560, 100, 56, '花落谁家？');
     elephant(235, 990, 1.95, { t: 0.3, trunk: 1, mood: 0 });
     donkey(1170, 990, 1.9, { t: 0.5, mood: 0 });
-    spark(W / 2, 640, 40);
-    pill(W / 2, 700, 300, 92, 48, '驴象之争');
+    spark(W / 2, 800, 40);
     ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', W / 2, 1050); ctx.restore();
   }
 }
 window.ready = (async () => {
-  const sample = '美国中期选举驴象之争一次看懂@比特双子';
+  const sample = '美国中期选举驴象之争花落谁家？@比特双子';
   await Promise.all([document.fonts.load(`900 100px ${SANS}`, sample), document.fonts.load(`700 26px ${SANS}`, sample)]);
   await document.fonts.ready; draw(); return true;
 })();
