@@ -475,13 +475,15 @@ function sceneTitleCard(t) {
   ctx.save(); ctx.globalAlpha = 1 - kout; ctx.translate(W / 2, 500); ctx.scale(sc, sc);
   clockFace(0, -20, 330, 7 + t * 2.5, 0.2, 1);
   elephant(-690, 340, 1.6, { t, trunk: 1, mood: 1 }); donkey(690, 340, 1.55, { t, flip: false, mood: 1 });
-  const g = ctx.createLinearGradient(-420, 0, 420, 0), sw = clamp(t / 0.8);
+  const g = ctx.createLinearGradient(-360, 0, 360, 0), sw = clamp(t / 0.8);
   g.addColorStop(0, '#B8935A'); g.addColorStop(clamp(sw - 0.12), '#C9A96A'); g.addColorStop(sw, '#FFF0C8'); g.addColorStop(clamp(sw + 0.12), '#C9A96A'); g.addColorStop(1, '#B8935A');
-  ctx.font = `900 130px ${F.serif}`; ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36;
-  ctx.fillText('美国中期选举', 0, 0); ctx.shadowBlur = 0;
-  ctx.globalAlpha *= 0.6; ctx.strokeStyle = C.gold; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-220, 60); ctx.lineTo(220, 60); ctx.stroke(); ctx.globalAlpha /= 0.6;
-  text('大象和驴，把它讲明白', 0, 126, { size: 44, weight: 700, spacing: 8 });
-  text('The Midterms, Explained by an Elephant and a Donkey', 0, 178, { size: 30, family: F.en, italic: true, color: C.gray });
+  ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36;
+  ctx.font = `900 88px ${F.serif}`; ctx.fillText('美国中期选举', 0, -60);          // line 1
+  ctx.font = `900 168px ${F.serif}`; ctx.fillText('驴象之争', 0, 105);            // line 2: the big one
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha *= 0.6; ctx.strokeStyle = C.gold; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-220, 148); ctx.lineTo(220, 148); ctx.stroke(); ctx.globalAlpha /= 0.6;
+  text('花落谁家？', 0, 218, { size: 58, weight: 700, spacing: 12 });             // line 3
+  text('Donkey vs. Elephant: who takes the midterms?', 0, 268, { size: 30, family: F.en, italic: true, color: C.gray });
   ctx.restore();
   const flash = Math.exp(-t / 0.09) * 0.55; if (flash > 0.01) { ctx.fillStyle = `rgba(255,240,210,${flash})`; ctx.fillRect(0, 0, W, H); }
 }
