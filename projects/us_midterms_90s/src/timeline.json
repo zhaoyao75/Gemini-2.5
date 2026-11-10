@@ -1,0 +1,55 @@
+{
+ "fps": 30,
+ "bpm": 66,
+ "intro_seconds": 1.0,
+ "total_beats": 90,
+ "tail_seconds": 0.5,
+ "scenes_beats": {
+  "D_title": [
+   0,
+   4
+  ],
+  "A_what": [
+   4,
+   12
+  ],
+  "B_gate": [
+   12,
+   20
+  ],
+  "C_balloons": [
+   20,
+   30
+  ],
+  "D_before": [
+   30,
+   38
+  ],
+  "E_senate": [
+   38,
+   48
+  ],
+  "F_house": [
+   48,
+   54
+  ],
+  "G_gov": [
+   54,
+   58
+  ],
+  "H_why": [
+   58,
+   68
+  ],
+  "I_next": [
+   68,
+   82
+  ],
+  "J_end": [
+   82,
+   90
+  ]
+ },
+ "sfx_beats": [],
+ "watermark": "@比特双子"
+}
