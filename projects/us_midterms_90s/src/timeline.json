@@ -2,52 +2,52 @@
  "fps": 30,
  "bpm": 66,
  "intro_seconds": 1.0,
- "total_beats": 94,
+ "total_beats": 90,
  "tail_seconds": 0.5,
  "scenes_beats": {
   "D_title": [
    0,
    4
   ],
-  "B_what": [
+  "A_what": [
    4,
    12
   ],
-  "C_power": [
+  "B_gate": [
    12,
    20
   ],
-  "E_history": [
+  "C_balloons": [
    20,
    30
   ],
-  "F_before": [
+  "D_before": [
    30,
    38
   ],
-  "G_senate": [
+  "E_senate": [
    38,
-   50
+   48
   ],
-  "H_house": [
-   50,
-   60
+  "F_house": [
+   48,
+   54
   ],
-  "I_gov": [
-   60,
-   66
+  "G_gov": [
+   54,
+   58
   ],
-  "J_why": [
-   66,
-   76
+  "H_why": [
+   58,
+   68
   ],
-  "K_next": [
-   76,
-   86
+  "I_next": [
+   68,
+   82
   ],
-  "L_end": [
-   86,
-   94
+  "J_end": [
+   82,
+   90
   ]
  },
  "sfx_beats": [],
