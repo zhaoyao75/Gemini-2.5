@@ -2,10 +2,10 @@
 
 按 `../douyin_vibe_all_nighter/LESSONS.md`（及 friendship_paradox 那份）的经验制作：Canvas 画面（每帧只由时间 t 决定）→ Playwright 逐帧截图 → numpy 合成配乐 → ffmpeg 合成。
 
-- 成片：`exports/us_midterms_90s.mp4`（约 80 秒，1920×1080，30fps，视频节拍 66 BPM / 音乐 132 BPM，约 -13 LUFS，LRA 约 3 LU，无人声，中英双语字幕，**无音效**）
+- 成片：`exports/us_midterms_90s.mp4`（约 80 秒，1920×1080，30fps，视频节拍 66 BPM / 音乐 132 BPM，-13.4 LUFS，LRA 7.3 LU，无人声，中英双语字幕，**无音效**）
 - 封面：`exports/cover.png`（3:4）、`exports/cover_4x3.png`（4:3），`node src/cover.js` / `node src/cover.js 43`
 - 事实核查：`FACTS.md`（每个数字的出处与核实状态）
-- 配乐：`src/bgm.py` 为本片重写（明亮 G 大调、马林巴主旋律、轻快鼓点；第 44 拍落拍对准参议院天平压过去）。**我听不到声音，响度/频段只能排除明显错误，好不好听需要人耳确认。**
+- 配乐：`src/bgm.py`（《权力的游戏》气质的**原创**曲子：D 小调 6/8 奔腾低弦 + 大提琴大跳主题，起承转合：安静开场 → 逐层加厚 → 旋律往上爬 → 第 44 拍落拍（对准参议院天平压过去）全乐队高潮 → 回落 → 再起 → 大提琴独奏收尾）。响度 -13.4 LUFS，LRA 7.3 LU。**我听不到声音，好不好听需要人耳确认。**历代版本保留在 `src/bgm_*.py`（bgm_hoc.py 是纸牌屋气质版，bgm_got_v1/v2.py 是权游版的前两稿）。
 - 经验对照：纯黑底金色点缀；标题卡 1 秒放最前且第 0 帧完整；转场用交叠推镜（`scene()`），无黑场；字幕与顶部标签先出后进、不叠字；`sfx_beats` 为空；水印 @比特双子；不放声明/参考页，参考文献放评论。
 
 ## 动画设计（大象和驴讲故事，数字尽量少）
