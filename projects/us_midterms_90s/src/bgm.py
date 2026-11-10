@@ -112,7 +112,7 @@ def cello(m, dur, vel=1.0, cut=1700, att=0.04):
 def tom(f0=92, dur=0.5, vel=1.0):
     n = int(dur * SR); t = np.arange(n) / SR
     return np.sin(2 * np.pi * np.cumsum(f0 * (1 + 0.55 * np.exp(-t * 16))) / SR) * np.exp(-t * 6.0) * env(n, 0.002, 0.08) * vel
-def tick(m=64, vel=1.0):
+def tick(m=76, vel=1.0):
     return pluck_saw(m, 0.11, vel, cut=2000)
 
 # ---------- 0–1 s: moving at once — drone swell, ticking sixteenths, a low tom, the first cello note of the theme ----------
@@ -127,14 +127,16 @@ bar = A0
 while bar < OUT0:
     bi = ((bar - A0) // 4) % 4; chord = PROG[bi]; end = min(bar + 4, OUT0)
     chorus = bar >= DROP; lv = level(bar, CRES)
-    add("pad", strings(PAD[chord], (end - bar) * VBEAT + 0.5, cut=1500 if not chorus else 2600, att=0.4), T(bar), gain=0.9 * lv)
+    add("pad", strings(PAD[chord], (end - bar) * VBEAT + 0.5, cut=1500 if not chorus else 2600, att=0.4), T(bar), gain=0.5 * lv)
     # the theme: cello in the verse; at the drop add the octave above (violins), the octave below (brass) and a bell
     for (tb, off, m, ln) in THEME:
         if tb != bi: continue
         b = bar + off
         if BREAK0 <= b < DROP or b >= OUT0: continue
-        add("lead", cello(m, ln * VBEAT + 0.15, 1.0), T(b), pan=-0.05, gain=1.5 * lv)
-        add("lead", pluck_saw(m, 0.3, 1.0, cut=3200), T(b), pan=0.1, gain=0.4 * lv)
+        add("lead", epiano(m, ln * VBEAT * 1.6 + 0.3, 1.0), T(b), pan=-0.05, gain=2.0 * lv)                  # the voice you hear
+        add("lead", pluck_saw(m, 0.32, 1.0, cut=4200), T(b), pan=0.1, gain=0.9 * lv)                           # bite
+        add("lead", cello(m, ln * VBEAT + 0.15, 1.0), T(b), pan=-0.05, gain=0.7 * lv)                           # body
+        add("keys", bell(m + 12, 0.9, 0.6), T(b), pan=0.25, gain=0.35 * lv)                                    # sparkle, an octave up
         if chorus:
             add("lead", cello(m + 12, ln * VBEAT + 0.3, 0.7, cut=3200), T(b), pan=0.2, gain=0.55 * lv)
             add("lead", cello(m - 12, ln * VBEAT + 0.3, 0.8, cut=1100), T(b), pan=-0.2, gain=0.5 * lv)
@@ -143,7 +145,7 @@ while bar < OUT0:
     if not chorus:
         for h in range(int(end - bar)):
             b = bar + h
-            add("bass", sub808(40, 0.8), T(b), gain=1.15 * lv * (0.6 if BREAK0 <= b < DROP else 1.0)); add("bass", pluck_saw(52, 0.3, 0.8, cut=650), T(b), gain=0.4 * lv)
+            add("bass", sub808(40, 0.8), T(b), gain=1.15 * lv * (0.6 if BREAK0 <= b < DROP else 1.0)); add("bass", pluck_saw(40, 0.3, 0.8, cut=400), T(b), gain=0.25 * lv)
     else:
         for h in (0, .75, 1.5, 2, 2.75, 3.25, 3.5):
             b = bar + h
@@ -159,14 +161,14 @@ while A0 + k * STEP < OUT0:
     if brk: continue
     acc = step in (0, 4, 6, 10, 12)                       # cinquillo accent
     if chorus:
-        add("arp", tick(64, 0.9 if acc else 0.5), T(b), pan=-0.15, gain=0.34 * lv)
+        add("arp", tick(76, 0.9 if acc else 0.5), T(b), pan=-0.15, gain=0.2 * lv)
         if KICK[step]: add("drums", kick(), T(b), gain=0.95)
         if DEMBOW[step]: add("drums", tom(150, 0.3, 0.8), T(b), pan=0.1, gain=0.55)
         if step in (3, 11): add("drums", clap(), T(b), gain=0.3)
         if HATS[step]: add("drums", hat(), T(b), pan=0.3, gain=0.22)
     else:
         sixteenth = b >= SC["D_before"][0] - 10            # eighths first, sixteenths from beat 20
-        if sixteenth or step % 2 == 0: add("arp", tick(64, (0.9 if acc else 0.5) if sixteenth else (0.9 if step % 4 == 0 else 0.55)), T(b), pan=-0.15, gain=0.5 * lv)
+        if sixteenth or step % 2 == 0: add("arp", tick(76, (0.9 if acc else 0.5) if sixteenth else (0.9 if step % 4 == 0 else 0.55)), T(b), pan=-0.15, gain=0.26 * lv)
         if step in (0, 8): add("drums", tom(92 if step == 0 else 110, 0.5, 0.9), T(b), gain=1.2 * lv)
         if step in (0, 8): add("drums", kick(), T(b), gain=0.7)
         if b >= BUILD0 and step % 2 == 1: add("drums", hat(), T(b), pan=-0.2, gain=0.08 + 0.14 * (b - BUILD0) / (BREAK0 - BUILD0))
@@ -198,12 +200,18 @@ BUS["lead"] = echo
 send = BUS["lead"] * 0.45 + BUS["keys"] * 0.4 + BUS["pad"] * 0.3 + BUS["fx"] * 0.3 + BUS["arp"] * 0.15
 nf = 1 << (N + irn - 1).bit_length()
 wet = np.stack([np.fft.irfft(np.fft.rfft(send[:, c], nf) * np.fft.rfft(ir[:, c], nf), nf)[:N] for c in range(2)], 1)
-mix = BUS["pad"] * 0.85 + BUS["lead"] * 1.1 + BUS["arp"] + BUS["keys"] + BUS["drums"] + BUS["bass"] * 1.9 + BUS["fx"] + wet * 0.3
+LM = 0.21                                   # melody level: chosen so it sits ~4 dB above everything else in 250–3000 Hz (clear, but the bass keeps its share)
+LEAD_PRES = filt(BUS["lead"], lo=1200, hi=4800, order=2)
+mix = BUS["pad"] * 0.85 + (BUS["lead"] * 1.5 + LEAD_PRES * 0.7) * LM + BUS["arp"] + BUS["keys"] + BUS["drums"] + BUS["bass"] * 1.9 + BUS["fx"] + wet * 0.3
 mix = filt(mix, lo=30, order=2); mix += 0.9 * filt(mix, lo=2500, order=2)
 mix *= np.clip((DUR - tt) / 1.5, 0, 1)[:, None]
 rms = np.sqrt(np.mean(mix ** 2)); mix *= 10 ** (-15.0 / 20) / max(rms, 1e-9)
 ceil = 10 ** (-1 / 20)
 mix = np.where(np.abs(mix) < 0.7 * ceil, mix, np.sign(mix) * (0.7 * ceil + 0.3 * ceil * np.tanh((np.abs(mix) - 0.7 * ceil) / (0.3 * ceil))))
+def _band(x, lo=250, hi=3000):
+    m = x.mean(axis=1); X = np.abs(np.fft.rfft(m)) ** 2; f = np.fft.rfftfreq(len(m), 1 / SR); return X[(f >= lo) & (f < hi)].sum()
+_others = sum(_band(BUS[k]) for k in ("pad", "arp", "keys", "drums", "bass", "fx")); _lead = _band((BUS["lead"] * 1.5 + LEAD_PRES * 0.7) * LM)
+print(f"melody share of the 250–3000 Hz band: {100 * _lead / (_lead + _others):.0f}%  (lead vs everything else: {10 * np.log10(_lead / _others):+.1f} dB)")
 outp = ROOT / "build" / os.environ.get("BGM_OUT", "bgm.wav"); outp.parent.mkdir(exist_ok=True)
 with wave.open(str(outp), "wb") as w:
     w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes((np.clip(mix, -1, 1) * 32767).astype("<i2").tobytes())
