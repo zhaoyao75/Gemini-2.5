@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Anthropic IPO</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-serif-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/eb-garamond/400-italic.css">
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Every frame is a pure function of time t (seconds). No requestAnimationFrame,
+// no Date, no unseeded randomness — so frame-by-frame rendering is repeatable.
+const TL = window.TL;                 // injected by render.js from timeline.json
+const BEAT = 60 / TL.bpm;
+const b = n => n * BEAT;              // beat index -> seconds
+// The title card lasts INTRO seconds; beat n >= TB is placed INTRO + (n - TB) beats into the video.
+const INTRO = TL.intro_seconds, TB = TL.scenes_beats.D_title[1];
+const T = n => n < TB ? n / TB * INTRO : INTRO + (n - TB) * BEAT;
+const S = Object.fromEntries(Object.entries(TL.scenes_beats).map(([k, [s, e]]) => [k, [T(s), T(e)]]));
+const DURATION = T(TL.total_beats) + TL.tail_seconds;
+
+const W = 1920, H = 1080;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---------- palette & fonts ----------
+const C = {
+  bgIn: '#0e0e0e', bgOut: '#000000',
+  text: '#EAEAF2', gray: '#8E8E93', gold: '#C9A96A', goldHi: '#E8CF94',
+  paper: '#EDE4D3', red: '#B53A2F',
+};
+const F = {
+  serif: '"Noto Serif SC"',
+  sans: '"Noto Sans SC"',
+  en: '"EB Garamond"',
+};
+
+// ---------- math helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const easeIO = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// fade in over fi, hold, fade out over fo, inside [t0, t1]
+const window01 = (t, t0, t1, fi = 0.4, fo = 0.35) => Math.min(prog(t, t0, t0 + fi), 1 - prog(t, t1 - fo, t1));
+
+// ---------- static random fields (seeded) ----------
+const STARS = (() => { const r = mulberry32(7); return Array.from({ length: 220 }, () => ({ x: r() * W, y: r() * H, s: 0.4 + r() * 1.3, ph: r() * 6.28, sp: 0.4 + r() * 1.2 })); })();
+const DUST = (() => { const r = mulberry32(11); return Array.from({ length: 46 }, () => ({ x: r() * W, y: r() * H, s: 0.8 + r() * 2.2, vx: (r() - .5) * 14, vy: -6 - r() * 16, ph: r() * 6.28 })); })();
+
+// ---------- text helpers ----------
+function text(str, x, y, { size = 40, family = F.sans, weight = 400, color = C.text, align = 'center', alpha = 1, italic = false, spacing = 0, baseline = 'alphabetic' } = {}) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${family}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  ctx.letterSpacing = spacing + 'px';
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// Bilingual subtitle band at 85–91% height
+function subtitle(t, t0, t1, zh, en) {
+  const a = window01(t, t0, t1);
+  if (a <= 0) return;
+  const rise = (1 - easeOut(prog(t, t0, t0 + 0.4))) * 8;
+  text(zh, W / 2, 948 + rise, { size: 46, weight: 700, alpha: a, spacing: 2 });
+  text(en, W / 2, 996 + rise, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+}
+
+// Small note band at ~70% height
+function note(t, t0, t1, str, x = W / 2, y = 790) {
+  const a = window01(t, t0, t1, 0.35, 0.3);
+  text(str, x, y, { size: 24, color: C.gray, alpha: a, spacing: 1 });
+}
+
+function topLabel(t, t0, t1, str) {
+  const a = window01(t, t0, t1, 0.5, 0.4);
+  if (a <= 0) return;
+  text(str, W / 2, 74, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+  ctx.save(); ctx.globalAlpha = a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92); ctx.lineTo(W / 2 + 40, 92); ctx.stroke(); ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function heart(x, y, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, 3);
+  ctx.bezierCurveTo(-7, -3, -4, -9, 0, -5); ctx.bezierCurveTo(4, -9, 7, -3, 0, 3);
+  ctx.fill(); ctx.restore();
+}
+
+function glowDot(x, y, r, color, glow, alpha = 1) {
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * glow);
+  g.addColorStop(0, color); g.addColorStop(0.25, color.replace(/[\d.]+\)$/, '0.35)')); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * glow, 0, 6.283); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- background ----------
+function background(t, frame) {
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, 80, W / 2, H * 0.5, W * 0.7);
+  g.addColorStop(0, C.bgIn); g.addColorStop(1, C.bgOut);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of STARS) {
+    const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * s.sp + s.ph));
+    ctx.fillStyle = `rgba(220,220,240,${a})`;
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+}
+function dust(t, alpha = 1) {
+  for (const d of DUST) {
+    const x = ((d.x + d.vx * t) % W + W) % W;
+    const y = ((d.y + d.vy * t) % H + H) % H;
+    const a = alpha * (0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.3 + d.ph)));
+    ctx.fillStyle = `rgba(232,207,148,${a})`;
+    ctx.beginPath(); ctx.arc(x, y, d.s, 0, 6.283); ctx.fill();
+  }
+}
+function finish(t, frame) {
+  // vignette
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // film grain, reseeded every frame
+  const r = mulberry32(1000 + frame);
+  for (let i = 0; i < 1800; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(r() * W, r() * H, 2, 2);
+  }
+  // watermark
+  text(TL.watermark, 60, 74, { size: 24, align: 'left', color: C.text, alpha: 0.35 });
+  // end fade (sample only)
+  const k = prog(t, DURATION - 0.6, DURATION);
+  if (k > 0) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// =====================================================================
+//  《熬一个通宵 ≈ 醉驾？》
+//  Transitions: neighbouring scenes overlap and "push" through each other (old one shrinks and
+//  fades while the new one settles from slightly larger), so there is never a dark gap.
+// =====================================================================
+const AMBER = '#E8A33A', RED = '#E0554A';
+const DRIFT = t => [6 * Math.sin(t * 0.31), 4 * Math.sin(t * 0.23 + 1)];
+function scene(t, key, fn, o = {}) {
+  const [s0, s1] = S[key];
+  const fi = o.fi ?? 0.45, fo = o.fo ?? 0.4;
+  // staggered hand-over: the old scene is almost gone by the boundary, the new one pushes in right after it
+  const kin = s0 <= 0 ? 1 : easeOut(prog(t, s0 - 0.1, s0 - 0.1 + fi));
+  const kout = easeIO(prog(t, s1 - fo + 0.1, s1 + 0.1));
+  if (kin <= 0 || kout >= 1) return;
+  const sc = lerp(o.zin ?? 1.07, 1, kin) * lerp(1, o.zout ?? 0.93, kout) * (1 + 0.035 * prog(t, s0, s1));   // slow push-in inside every scene
+  const [dx, dy] = DRIFT(t);
+  ctx.save(); ctx.globalAlpha *= kin * (1 - kout);
+  ctx.translate(W / 2 + dx, 470 + dy); ctx.scale(sc, sc); ctx.translate(-W / 2, -470);
+  fn(t - s0);
+  ctx.restore();
+}
+// subtitles / labels slide: in from below, out upwards — consecutive lines hand over without a dip
+function slideText(t, t0, t1, draw) {
+  const kin = easeOut(prog(t, t0, t0 + 0.18)), kout = easeIO(prog(t, t1 - 0.16, t1));
+  const a = kin * (1 - kout); if (a <= 0) return;
+  draw(a, (1 - kin) * 16 - kout * 14);
+}
+function sub(t, t0, t1, zh, en) {
+  slideText(t, t0, t1, (a, dy) => {
+    text(zh, W / 2, 948 + dy, { size: 46, weight: 700, alpha: a, spacing: 2 });
+    text(en, W / 2, 996 + dy, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+  });
+}
+function label(t, t0, t1, str) {
+  slideText(t, t0, t1, (a, dy) => {
+    text(str, W / 2, 74 + dy, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+    ctx.save(); ctx.globalAlpha *= a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92 + dy); ctx.lineTo(W / 2 + 40, 92 + dy); ctx.stroke(); ctx.restore();
+  });
+}
+
+// ---------- reusable drawings ----------
+function clockFace(x, y, R, hours, a = 1, glow = 0) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  if (glow > 0) { const g = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 1.6); g.addColorStop(0, `rgba(232,207,148,${0.18 * glow})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * 1.6, 0, 6.283); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(234,234,242,0.85)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.283); ctx.stroke();
+  for (let i = 0; i < 60; i++) { const an = i / 60 * 6.283, big = i % 5 === 0; ctx.strokeStyle = big ? 'rgba(234,234,242,0.9)' : 'rgba(234,234,242,0.3)'; ctx.lineWidth = big ? 5 : 2; ctx.beginPath(); ctx.moveTo(Math.cos(an) * (R - (big ? 26 : 12)), Math.sin(an) * (R - (big ? 26 : 12))); ctx.lineTo(Math.cos(an) * (R - 6), Math.sin(an) * (R - 6)); ctx.stroke(); }
+  const ha = (hours % 12) / 12 * 6.283 - Math.PI / 2, ma = (hours % 1) * 6.283 - Math.PI / 2;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = C.goldHi; ctx.lineWidth = 12; ctx.shadowColor = 'rgba(232,207,148,0.6)'; ctx.shadowBlur = 16;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ha) * R * 0.5, Math.sin(ha) * R * 0.5); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ma) * R * 0.78, Math.sin(ma) * R * 0.78); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.fillStyle = C.goldHi; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+function hhmm(h) { h = ((h % 24) + 24) % 24; const H = Math.floor(h), M = Math.floor((h - H) * 60); return String(H).padStart(2, '0') + ':' + String(M).padStart(2, '0'); }
+function card(x, y, w, h, a = 1, glow = 0.45) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = `rgba(232,207,148,${glow})`; ctx.shadowBlur = 36;
+  roundRect(x - w / 2, y - h / 2, w, h, 20); ctx.fillStyle = '#141414'; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(201,169,106,0.55)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+}
+function noteCard(x, y, w, big, small, rot, k, a = 1) {
+  if (k <= 0) return;
+  const drop = (1 - easeOut(Math.min(1, k))) * 260;
+  ctx.save(); ctx.globalAlpha *= a * Math.min(1, k * 3); ctx.translate(x, y - drop); ctx.rotate(rot);
+  ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+  roundRect(-w / 2, -110, w, 220, 8); ctx.fillStyle = '#EDE4D3'; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  text(big, 0, -6, { size: 40, weight: 700, color: '#2a2118' });
+  text(small, 0, 52, { size: 24, color: '#6b5a40' });
+  ctx.restore();
+}
+
+// ---------- shared characters & effects ----------
+function person(x, y, s, col = C.goldHi, rot = 0, a = 1) {   // (x, y) = feet
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -62, 17, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-27, 0); ctx.quadraticCurveTo(-29, -40, 0, -40); ctx.quadraticCurveTo(29, -40, 27, 0); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+const SPARKS = (() => { const r = mulberry32(97); return Array.from({ length: 28 }, () => ({ an: r() * 6.283, sp: 220 + r() * 520, s: 2 + r() * 4, red: r() < 0.5 })); })();
+function burst(x, y, age, scale = 1) {
+  if (age < 0 || age > 0.8) return;
+  SPARKS.forEach(p => {
+    const d = p.sp * scale * (age - 0.6 * age * age), a = 1 - age / 0.8;
+    ctx.fillStyle = p.red ? `rgba(224,85,74,${a})` : `rgba(245,214,150,${a})`;
+    ctx.beginPath(); ctx.arc(x + Math.cos(p.an) * d, y + Math.sin(p.an) * d, p.s * (1 - age), 0, 6.283); ctx.fill();
+  });
+}
+
+const BLUE = [91, 141, 239], REDP = [210, 73, 63], GREYP = [106, 110, 122], PALE = [169, 195, 245], DIMC = [70, 74, 88], DIMR = [150, 62, 58];
+const rgb = (c, a = 1) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${a})`;
+const mixc = (c1, c2, k) => [lerp(c1[0], c2[0], k), lerp(c1[1], c2[1], k), lerp(c1[2], c2[2], k)];
+const shakeAt = (t, t0) => { const a = t - t0; return a > 0 && a < 0.5 ? 8 * Math.exp(-9 * a) * Math.sin(70 * a) : 0; };
+const pulseAt = (t, t0, w = 0.16) => Math.exp(-Math.pow((t - t0) / w, 2));
+const ovAlpha = (t, s0, s1) => easeOut(prog(t, s0 - 0.1, s0 + 0.35)) * (1 - easeIO(prog(t, s1 - 0.3, s1 + 0.1)));
+// ---------- the balance scale (also the huge faint glue layer) ----------
+function balance(x, y, s, tilt, a = 1, line = 'rgba(234,234,242,0.9)', lw = 6) {
+  const L = 280, ex = L * Math.cos(tilt), ey = L * Math.sin(tilt);
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.strokeStyle = line; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 330); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-120, 345); ctx.lineTo(120, 345); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-ex, -ey); ctx.lineTo(ex, ey); ctx.stroke();
+  [[-ex, -ey], [ex, ey]].forEach(([px, py]) => {
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - 70, py + 150); ctx.moveTo(px, py); ctx.lineTo(px + 70, py + 150); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px, py + 150, 70, 0, Math.PI); ctx.stroke();
+  });
+  ctx.fillStyle = line; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.283); ctx.fill();
+  ctx.restore();
+  return { L: [x - ex * s, y + (-ey + 150) * s], R: [x + ex * s, y + (ey + 150) * s] };
+}
+function glue(t) {
+  balance(W / 2, 300, 1.55, 0.14 * Math.sin(t * 0.35), 0.07, 'rgba(234,234,242,1)', 3);
+  let p = 0; Object.entries(S).forEach(([k, [s0]]) => { if (s0 > 0) p = Math.max(p, Math.exp(-Math.pow((t - s0) / 0.22, 2))); });
+  if (p > 0.01) { const g = ctx.createRadialGradient(W / 2, 470, 20, W / 2, 470, 900); g.addColorStop(0, `rgba(232,207,148,${0.13 * p})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+}
+function stamp2(x, y, rot, w, str, size, k, col) {
+  if (k <= 0) return;
+  const hh = Math.max(112, size * 1.6);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); const ss = lerp(2.6, 1, easeOut(k)); ctx.scale(ss, ss); ctx.globalAlpha *= Math.min(1, k * 4);
+  ctx.strokeStyle = col; ctx.lineWidth = 8; roundRect(-w / 2, -hh / 2, w, hh, 12); ctx.stroke(); ctx.lineWidth = 3; roundRect(-w / 2 + 12, -hh / 2 + 12, w - 24, hh - 24, 8); ctx.stroke();
+  text(str, 0, size * 0.36, { size, family: F.serif, weight: 900, color: col, spacing: 4 }); ctx.restore();
+}
+function tagCard(x, y, str, a = 1, size = 36, w = 340, col = null) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8; roundRect(-w / 2, -32, w, 64, 10); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowColor = 'transparent';
+  if (col) { ctx.fillStyle = rgb(col); ctx.fillRect(-w / 2, -32, 10, 64); }
+  text(str, 6, size * 0.36, { size, weight: 700, color: '#2a2118' }); ctx.restore();
+}
+
+function easeIn2(k) { return k * k; }
+const GOLD = [201, 169, 106], GOLDH = [232, 207, 148];
+
+// ---------- the golden bell mascot: (x, y) = hanging point, body hangs below ----------
+function bell(x, y, s, o = {}) {
+  const { swing = 0, mood = 1, t = 0, a = 1, glow = 0, clap = 0, feet = false, squash = 0 } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(swing); ctx.scale(s * (1 + squash * 0.06), s * (1 - squash * 0.08));
+  if (glow > 0) { ctx.shadowColor = `rgba(232,207,148,${0.8 * glow})`; ctx.shadowBlur = 60 * glow; }
+  ctx.strokeStyle = '#8a6a32'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(0, -34, 16, 0, 6.283); ctx.stroke();
+  const g = ctx.createLinearGradient(-130, 0, 130, 0);
+  g.addColorStop(0, '#8a6a32'); g.addColorStop(0.3, '#E8CF94'); g.addColorStop(0.6, '#C9A96A'); g.addColorStop(1, '#7a5b28');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(-36, 10); ctx.bezierCurveTo(-36, -22, 36, -22, 36, 10);
+  ctx.bezierCurveTo(40, 100, 70, 140, 126, 176); ctx.lineTo(126, 200); ctx.lineTo(-126, 200); ctx.lineTo(-126, 176);
+  ctx.bezierCurveTo(-70, 140, -40, 100, -36, 10); ctx.closePath(); ctx.fill();
+  roundRect(-136, 194, 272, 28, 14); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.beginPath(); ctx.ellipse(-62, 96, 12, 46, 0.25, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#E8CF94'; ctx.beginPath(); ctx.arc(clap * 30, 240, 21, 0, 6.283); ctx.fill();
+  const bl = Math.sin(t * 2.1) > 0.96 ? 0.15 : 1;
+  [-36, 36].forEach(ex => {
+    if (mood > 0.5) { ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(ex, 124, 13, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, 120, 12, 15 * bl, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#2a2118'; ctx.beginPath(); ctx.ellipse(ex + 2, 122, 6, 8 * bl, 0, 0, 6.283); ctx.fill(); }
+  });
+  ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 142, mood > 0.5 ? 20 : 10, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  if (feet) { ctx.fillStyle = '#7a5b28'; roundRect(-96, 222, 60, 26, 12); ctx.fill(); roundRect(36, 222, 60, 26, 12); ctx.fill(); }
+  ctx.restore();
+}
+function coin(x, y, r, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  ctx.fillStyle = '#C9A96A'; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.42, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#E8CF94'; ctx.beginPath(); ctx.ellipse(0, -r * 0.1, r * 0.78, r * 0.28, 0, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+const bigNum = (str, x, y, size, a = 1, k = 1) => {
+  const sc = lerp(1.35, 1, easeOut(clamp(k)));
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  ctx.shadowColor = 'rgba(232,207,148,0.5)'; ctx.shadowBlur = 40;
+  text(str, 0, 0, { size, family: F.serif, weight: 900, color: C.goldHi, alpha: a * Math.min(1, k * 4) });
+  ctx.restore();
+};
+
+// ---------- title card ----------
+function sceneTitleCard(t) {
+  const [, d1] = S.D_title, kout = easeIO(prog(t, d1 - 0.3, d1 + 0.1));
+  if (kout >= 1) return;
+  const slam = easeOut(prog(t, 0, 0.28)), sc = lerp(1.18, 1, slam) * lerp(1, 0.92, kout);
+  ctx.save(); ctx.globalAlpha = 1 - kout; ctx.translate(W / 2, 500); ctx.scale(sc, sc);
+  bell(-620, -250, 1.1, { t, swing: 0.12 * Math.sin(t * 7), mood: 1, glow: 0.4 });
+  // ticker board on the right
+  ctx.save(); ctx.translate(640, 90); ctx.shadowColor = 'rgba(232,207,148,0.5)'; ctx.shadowBlur = 40; roundRect(-190, -110, 380, 220, 20); ctx.fillStyle = '#141414'; ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(201,169,106,0.8)'; ctx.lineWidth = 4; ctx.stroke();
+  text('ANT', 0, 30, { size: 120, family: F.en, italic: true, color: C.goldHi }); text('NASDAQ', 0, -62, { size: 28, color: C.gray, spacing: 8 }); ctx.restore();
+  const g = ctx.createLinearGradient(-360, 0, 360, 0), sw = clamp(t / 0.8);
+  g.addColorStop(0, '#B8935A'); g.addColorStop(clamp(sw - 0.12), '#C9A96A'); g.addColorStop(sw, '#FFF0C8'); g.addColorStop(clamp(sw + 0.12), '#C9A96A'); g.addColorStop(1, '#B8935A');
+  ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36;
+  ctx.font = `900 88px ${F.serif}`; ctx.fillText('Anthropic 上市', 0, -60);
+  ctx.font = `900 168px ${F.serif}`; ctx.fillText('敲钟倒计时', 0, 105);
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha *= 0.6; ctx.strokeStyle = C.gold; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-220, 148); ctx.lineTo(220, 148); ctx.stroke(); ctx.globalAlpha /= 0.6;
+  text('最新进展与展望', 0, 218, { size: 58, weight: 700, spacing: 12 });
+  text('Anthropic IPO: where things stand — and what’s next', 0, 268, { size: 30, family: F.en, italic: true, color: C.gray });
+  ctx.restore();
+  const flash = Math.exp(-t / 0.09) * 0.55; if (flash > 0.01) { ctx.fillStyle = `rgba(255,240,210,${flash})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- A: staircase — the little bell climbs  6/1 → 10/26 → today → (listing) ----------
+function sceneStairs(lt, t) {
+  const ST = [
+    { x: 260, top: 700, date: '6月1日', tag: '保密递交', rise: -0.3 },
+    { x: 660, top: 560, date: '10月26日', tag: '文件公开', rise: 2.6 },
+    { x: 1060, top: 420, date: '11月10日', tag: '首次给出价格区间', rise: 5.6 },
+    { x: 1460, top: 280, date: '挂牌', tag: '据报道 · 最早下周', rise: 7.4 }];
+  const arr = [0.2, 3.6, 6.6];                       // beats at which the bell lands on step 0, 1, 2
+  const bellAt = lt => {
+    for (let i = 2; i >= 1; i--) if (lt >= b(arr[i] - 0.7)) {
+      const k = prog(lt, b(arr[i] - 0.7), b(arr[i])), p = ST[i - 1], q = ST[i];
+      return [lerp(p.x + 200, q.x + 200, easeIO(k)), lerp(p.top, q.top, easeIO(k)) - 230 * Math.sin(Math.PI * k), k >= 1 ? 0 : 1 - k];
+    }
+    if (lt >= b(arr[0] - 0.7)) { const k = prog(lt, b(arr[0] - 0.7), b(arr[0])); return [ST[0].x + 200, ST[0].top - 230 * Math.sin(Math.PI * k) * (lt < 0.1 ? 0 : 1), 0]; }
+    return [ST[0].x + 200, ST[0].top, 0];
+  };
+  let sh = 0; arr.forEach(a => { sh += shakeAt(lt, b(a)) * (a > 3 ? 1 : 0.5); });
+  ctx.save(); ctx.translate(sh, 0);
+  ST.forEach((s, i) => {
+    const k = easeOut(prog(lt, b(s.rise), b(s.rise) + 0.55)); if (k <= 0) return;
+    const top = lerp(900, s.top, k), last = i === 3;
+    ctx.save(); ctx.globalAlpha *= Math.min(1, k * 2);
+    if (last) { ctx.setLineDash([18, 12]); ctx.strokeStyle = `rgba(232,207,148,${0.55 + 0.3 * Math.sin(lt * 5)})`; ctx.lineWidth = 5; roundRect(s.x, top, 400, 900 - top, 10); ctx.stroke(); ctx.setLineDash([]); }
+    else {
+      ctx.shadowColor = 'rgba(232,207,148,0.25)'; ctx.shadowBlur = 30; roundRect(s.x, top, 400, 900 - top, 10); ctx.fillStyle = '#141414'; ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = C.goldHi; ctx.fillRect(s.x, top, 400, 12);
+    }
+    ctx.restore();
+    const ta = clamp((k - 0.6) / 0.4);
+    text(s.date, s.x + 200, top + 100, { size: last ? 84 : 76, weight: 700, family: F.serif, color: last ? C.goldHi : C.text, alpha: ta });
+    text(s.tag, s.x + 200, top + 160, { size: 32, color: last ? C.goldHi : C.gray, alpha: ta });
+  });
+  const [bx, by, air] = bellAt(lt);
+  const on3 = lt >= b(arr[2]);
+  bell(bx, by - 236 * 0.62, 0.62, { t: lt, feet: true, mood: on3 ? 1 : 0, swing: air * 0.25 * Math.sin(lt * 14), squash: shakeAt(lt, b(arr[2])) / 8, glow: on3 ? 0.5 : 0 });
+  const tk = prog(lt, b(arr[2]), b(arr[2]) + 0.5);
+  if (tk > 0) { stamp2(830, 330, -0.12, 330, '今天', 84, tk, 'rgba(232,207,148,1)'); }
+  burst(ST[1].x + 200, ST[1].top, lt - b(arr[1]), 0.8); burst(ST[2].x + 200, ST[2].top, lt - b(arr[2]), 1.0); burst(ST[0].x + 200, ST[0].top, lt - b(arr[0]), 0.5);
+  ctx.restore();
+}
+
+// ---------- B: revenue — last year's whole year = one block; this year's first nine months stack up to 7+ ----------
+function blockUnit(x, y, w, h, label, a = 1, dash = false) {
+  ctx.save(); ctx.globalAlpha *= a;
+  if (dash) { ctx.setLineDash([14, 10]); ctx.strokeStyle = C.goldHi; ctx.lineWidth = 4; roundRect(x - w / 2, y - h, w, h, 6); ctx.stroke(); ctx.setLineDash([]); }
+  else {
+    const g = ctx.createLinearGradient(0, y - h, 0, y); g.addColorStop(0, '#E8CF94'); g.addColorStop(1, '#B8935A');
+    roundRect(x - w / 2, y - h, w, h - 4, 8); ctx.fillStyle = g; ctx.fill();
+    if (label) text(label, x, y - h / 2 + 14, { size: 40, weight: 700, color: '#2a2118' });
+  }
+  ctx.restore();
+}
+function sceneRevenue(lt, t) {
+  const UH = 100, BY = 860;
+  const k0 = easeOut(prog(lt, -0.1, 0.3));
+  blockUnit(320, BY - (1 - k0) * 220, 300, UH, '全年', k0);
+  text('2025 全年', 320, BY - UH - 36, { size: 40, weight: 700, color: C.text, alpha: k0 });
+  // dotted reference line from the single block up to the tower's top
+  const nTot = 7, land = i => b(1.2 + i * 0.68);
+  let sh = 0; for (let i = 0; i < nTot; i++) sh += shakeAt(lt, land(i)) * 0.5; sh += shakeAt(lt, b(6.4)) * 0.8;
+  ctx.save(); ctx.translate(0, sh);
+  let n = 0;
+  for (let i = 0; i < nTot; i++) {
+    const k = prog(lt, land(i) - 0.28, land(i)); if (k <= 0) continue;
+    n = i + 1;
+    const y = BY - i * UH, drop = (1 - easeIn2(k)) * 700;
+    blockUnit(900, y - drop, 300, UH, '全年', 1);
+    if (k >= 1) burst(900, y - UH / 2, lt - land(i), 0.25);
+  }
+  const kq = prog(lt, b(6.4) - 0.2, b(6.4));
+  if (kq > 0) blockUnit(900, BY - nTot * UH - (1 - easeIn2(kq)) * 500, 300, 28, '', 1);
+  ctx.restore();
+  if (n > 0) text('2026 前 9 个月', 900, BY - nTot * UH - 62, { size: 40, weight: 700, color: C.goldHi, alpha: prog(lt, b(1.2), b(1.2) + 0.4) });
+  // giant counter
+  const cnt = Math.min(n, 7), last = n >= 1 ? land(n - 1) : 0;
+  if (n > 0) {
+    const kk = prog(lt, last, last + 0.3);
+    bigNum(cnt + '×', 1510, 560, 320, 1, n === 1 ? kk : lerp(0.6, 1, kk));
+    if (kq > 0.5) text('还多一点', 1510, 650, { size: 56, weight: 700, color: C.text, alpha: prog(lt, b(6.4), b(6.4) + 0.4) });
+  }
+}
+
+// ---------- C: valuation bars: Feb → May ×2.5 → IPO (reportedly still being negotiated) ----------
+function sceneValue(lt, t) {
+  const BY = 830, X = [440, 840, 1240], BW = 260, sc = 560 / 9650;
+  const bar = (i, h, kg, col, dash) => {
+    const hh = h * kg; if (hh <= 1) return;
+    if (dash) { ctx.save(); ctx.setLineDash([16, 12]); ctx.strokeStyle = 'rgba(232,207,148,0.8)'; ctx.lineWidth = 5; roundRect(X[i] - BW / 2, BY - hh, BW, hh, 8); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); }
+    else {
+      const g = ctx.createLinearGradient(0, BY - hh, 0, BY); g.addColorStop(0, col[0]); g.addColorStop(1, col[1]);
+      ctx.save(); ctx.shadowColor = 'rgba(232,207,148,0.3)'; ctx.shadowBlur = 30; roundRect(X[i] - BW / 2, BY - hh, BW, hh, 8); ctx.fillStyle = g; ctx.fill(); ctx.restore();
+    }
+  };
+  const k1 = easeOut(prog(lt, -0.2, 0.8)), k2 = easeOut(prog(lt, b(1.3), b(3.0))), k3 = easeOut(prog(lt, b(4.6), b(6.0)));
+  ctx.strokeStyle = 'rgba(234,234,242,0.35)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(220, BY); ctx.lineTo(1460, BY); ctx.stroke();
+  bar(0, 3800 * sc, k1, ['#B8935A', '#7a5b28']);
+  bar(1, 9650 * sc, k2, ['#E8CF94', '#B8935A']);
+  bar(2, 11000 * sc, k3, null, true);
+  text('2 月', X[0], 874, { size: 34, weight: 700, color: C.text, alpha: k1 });
+  text('5 月', X[1], 874, { size: 34, weight: 700, color: C.text, alpha: k2 });
+  text('上市时', X[2], 874, { size: 34, weight: 700, color: C.goldHi, alpha: k3 });
+  const kx = prog(lt, b(3.0), b(3.4));
+  if (kx > 0) {
+    bigNum('×2.5', 410, 400, 165, 1, kx);
+    ctx.save(); ctx.globalAlpha *= clamp(kx * 2); ctx.strokeStyle = C.goldHi; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(500, 620 - 130 * kx); ctx.quadraticCurveTo(650, 500, 760, 300 + 40 * (1 - kx)); ctx.stroke(); ctx.restore();
+  }
+  if (k3 > 0.3) { bigNum('?', 1240, 560, 300, clamp((k3 - 0.3) * 2) * 0.9, k3); text('据报道 · 仍在谈', 1240, 700, { size: 36, color: C.text, alpha: clamp((k3 - 0.5) * 2) }); }
+}
+
+// ---------- D: raise — the jar fills with coins: "up to ≈ 640亿美元" ----------
+const COINS = (() => { const r = mulberry32(55); return Array.from({ length: 120 }, (_, i) => ({ x: 380 + r() * 520, t0: 0.2 + i * 0.045 + r() * 0.1, sp: 700 + r() * 300 })); })();
+function sceneRaise(lt, t) {
+  const JX = 340, JW = 600, JT = 190, JB = 850, JH = JB - JT;
+  const lv = easeIO(prog(lt, 0.15, b(6.2)));
+  // jar
+  ctx.save(); ctx.shadowColor = 'rgba(232,207,148,0.3)'; ctx.shadowBlur = 40; roundRect(JX, JT, JW, JH, 26); ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fill(); ctx.restore();
+  ctx.save(); roundRect(JX, JT, JW, JH, 26); ctx.clip();
+  const fy = JB - JH * lv * 0.94;
+  const g = ctx.createLinearGradient(0, fy, 0, JB); g.addColorStop(0, '#E8CF94'); g.addColorStop(1, '#8a6a32'); ctx.fillStyle = g; ctx.fillRect(JX, fy, JW, JB - fy);
+  ctx.strokeStyle = 'rgba(42,33,24,0.35)'; ctx.lineWidth = 3; for (let y = JB - 22; y > fy; y -= 34) { ctx.beginPath(); for (let x = JX; x < JX + JW; x += 60) { ctx.moveTo(x + ((Math.round((JB - y) / 34)) % 2) * 30, y); ctx.ellipse(x + 30 + ((Math.round((JB - y) / 34)) % 2) * 30, y, 30, 10, 0, Math.PI, 0, true); } ctx.stroke(); }
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(234,234,242,0.8)'; ctx.lineWidth = 7; roundRect(JX, JT, JW, JH, 26); ctx.stroke();
+  // falling coins
+  COINS.forEach(c => { const a = lt - c.t0; if (a < 0) return; const y = 80 + c.sp * a; if (y > fy - 6) return; coin(c.x, y, 34); });
+  // number panel
+  const val = Math.round(640 * lv / 10) * 10;
+  text('最多募资', 1400, 330, { size: 56, weight: 700, color: C.text, alpha: clamp(lt / 0.3) });
+  bigNum('≈ ' + val, 1400, 560, 230, 1, 1);
+  text('亿美元', 1400, 680, { size: 76, weight: 700, color: C.goldHi, alpha: clamp(lt / 0.3) });
+  text('区间上限 × 约 8 亿股', 1400, 760, { size: 30, color: C.gray, alpha: prog(lt, b(4), b(4.5)) });
+}
+
+// ---------- F: roadshow → pricing → listing (tension builds into the bell) ----------
+function sceneRoad(lt, t) {
+  const X = [360, 960, 1560], Y = 470, names = ['路演', '定价', '挂牌'], subs = ['向投资者讲故事', '定下每股价格', '开始公开交易'], on = [0.15, 1.75, 3.3];
+  const fadeOthers = 1 - 0.75 * easeIO(prog(lt, b(4.4), b(5.2)));
+  for (let i = 0; i < 3; i++) {
+    const k = easeBack(prog(lt, b(on[i]) - 0.2, b(on[i]) + 0.3)), act = clamp(k), last = i === 2;
+    const grow = last ? lerp(1, 1.22, easeIO(prog(lt, b(4.4), b(5.6)))) : 1;
+    const jx = last ? 6 * easeIn2(prog(lt, b(4.8), b(6))) * Math.sin(lt * 90) : 0;
+    ctx.save(); ctx.globalAlpha *= (last ? 1 : fadeOthers) * (0.3 + 0.7 * act); ctx.translate(X[i] + jx, Y); ctx.scale(grow, grow);
+    ctx.shadowColor = `rgba(232,207,148,${0.5 * act})`; ctx.shadowBlur = 50 * act; roundRect(-230, -170, 460, 340, 22); ctx.fillStyle = '#141414'; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = act > 0.5 ? C.goldHi : 'rgba(201,169,106,0.5)'; ctx.lineWidth = act > 0.5 ? 6 : 3; ctx.stroke();
+    text(names[i], 0, 20, { size: 140, family: F.serif, weight: 900, color: act > 0.5 ? C.goldHi : C.gray });
+    text(subs[i], 0, 110, { size: 38, color: C.text, alpha: 0.9 });
+    ctx.restore();
+    if (i < 2) { ctx.save(); ctx.globalAlpha *= fadeOthers * clamp(k); text('→', (X[i] + X[i + 1]) / 2, Y + 36, { size: 110, weight: 700, color: C.goldHi }); ctx.restore(); }
+  }
+  const kt = prog(lt, b(4.0), b(4.5));
+  text('据报道：最早下周', 960, 790, { size: 60, weight: 700, color: C.goldHi, alpha: kt * (1 - 0.0) });
+  const dark = 0.45 * easeIn2(prog(lt, b(5.0), b(6)));
+  if (dark > 0) { ctx.fillStyle = `rgba(0,0,0,${dark})`; ctx.fillRect(0, 0, W, 1080); }
+}
+
+// ---------- E: the bell strikes on the drum drop (beat 44) ----------
+function sceneBell(lt, t) {
+  const a = Math.max(0, lt);
+  ctx.save(); ctx.translate(shakeAt(lt, 0) * 1.6, shakeAt(lt, 0.05) * 1.2);
+  ctx.strokeStyle = 'rgba(201,169,106,0.9)'; ctx.lineWidth = 16; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(480, 140); ctx.lineTo(1440, 140); ctx.stroke();
+  const sw = 0.30 * Math.exp(-1.3 * a) * Math.sin(7 * a);
+  for (let i = 0; i < 4; i++) { const r = (a - 0.12 * i) * 1000; if (r > 0 && r < 1100) { ctx.strokeStyle = `rgba(232,207,148,${0.7 * (1 - r / 1100)})`; ctx.lineWidth = 8 * (1 - r / 1100) + 1; ctx.beginPath(); ctx.arc(960, 480, r, 0, 6.283); ctx.stroke(); } }
+  bell(960, 150, 2.5, { t: lt, swing: sw, clap: -Math.sin(7 * a) * Math.exp(-1.3 * a), mood: 1, glow: 0.35 + 0.65 * pulseAt(lt, 0.05, 0.4) });
+  burst(960, 560, a, 1.5); burst(960, 560, a - 0.12, 1.1);
+  const ks = prog(lt, b(0.5), b(0.5) + 0.3);
+  stamp2(1560, 330, -0.1, 420, 'ANT', 100, ks, 'rgba(232,207,148,1)');
+  const kn = easeOut(prog(lt, b(1.2), b(1.2) + 0.4)); tagCard(1560, 450, '纳斯达克 · A 类股', kn, 32, 420);
+  tagCard(360, 790, '最早下周 · 据报道 · 未确认', easeOut(prog(lt, b(2.4), b(2.4) + 0.4)), 30, 520);
+  ctx.restore();
+  const fl = Math.exp(-lt / 0.1) * 0.7; if (lt >= 0 && fl > 0.01) { ctx.fillStyle = `rgba(255,240,210,${fl})`; ctx.fillRect(0, 0, W, 1080); }
+}
+
+// ---------- G: control — one founder share = half the votes ----------
+function sceneControl(lt, t) {
+  const CX = 600, CY = 490, R = 290;
+  const kr = easeOut(prog(lt, -0.2, 0.6));
+  ctx.save(); ctx.globalAlpha *= kr;
+  for (let i = 0; i < 120; i++) { const an = i / 120 * 6.283 - Math.PI / 2 + lt * 0.05; ctx.fillStyle = 'rgba(234,234,242,0.5)'; ctx.beginPath(); ctx.arc(CX + Math.cos(an) * R, CY + Math.sin(an) * R, 11, 0, 6.283); ctx.fill(); }
+  ctx.restore();
+  text('其他所有股票', CX, CY + R + 80, { size: 32, color: C.gray, alpha: kr });
+  const ka = easeIO(prog(lt, b(1.6), b(3.0)));
+  if (ka > 0) { ctx.strokeStyle = C.goldHi; ctx.lineWidth = 56; ctx.shadowColor = 'rgba(232,207,148,0.6)'; ctx.shadowBlur = 40; ctx.beginPath(); ctx.arc(CX, CY, R, -Math.PI / 2, -Math.PI / 2 + 0.501 * 6.283 * ka); ctx.stroke(); ctx.shadowBlur = 0; }
+  const kd = prog(lt, b(0.5), b(1.2)), land = easeIn2(kd);
+  if (kd > 0) {
+    const cy = lerp(-100, CY, land); ctx.save(); ctx.translate(CX + shakeAt(lt, b(1.2)) * 0.6, cy);
+    ctx.shadowColor = 'rgba(232,207,148,0.7)'; ctx.shadowBlur = 40; ctx.fillStyle = C.goldHi; ctx.beginPath(); ctx.arc(0, 0, 100, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#8a6a32'; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(0, 0, 80, 0, 6.283); ctx.stroke();
+    text('1', 0, 38, { size: 120, family: F.serif, weight: 900, color: '#2a2118' }); ctx.restore();
+    burst(CX, CY, lt - b(1.2), 1.1);
+  }
+  text('创始人的特殊股', CX, CY - R - 56, { size: 36, weight: 700, color: C.goldHi, alpha: prog(lt, b(1.2), b(1.7)) });
+  const kn = prog(lt, b(3.0), b(3.4));
+  if (kn > 0) { bigNum('50.1%', 1400, 520, 230, 1, kn); text('总投票权', 1400, 330, { size: 60, weight: 700, color: C.text, alpha: clamp(kn * 2) }); }
+  tagCard(1400, 700, '长期利益信托 · 选出多数董事', easeOut(prog(lt, b(4.2), b(4.7))), 32, 600);
+}
+
+// ---------- H: the other end of the seesaw: compute commitments ----------
+function sceneBill(lt, t) {
+  const PX = 960, PY = 650, HL = 640;
+  const kd = prog(lt, b(1.0), b(1.0) + 0.3), hit = b(1.0) + 0.3;
+  const a = lt - hit;
+  const th = a < 0 ? 0 : 0.2 * (1 - Math.exp(-6 * a) * Math.cos(16 * a));
+  ctx.save(); ctx.translate(shakeAt(lt, hit) * 1.4, 0);
+  ctx.fillStyle = 'rgba(201,169,106,0.9)'; ctx.beginPath(); ctx.moveTo(PX, PY - 4); ctx.lineTo(PX - 80, 860); ctx.lineTo(PX + 80, 860); ctx.closePath(); ctx.fill();
+  ctx.save(); ctx.translate(PX, PY); ctx.rotate(th); ctx.strokeStyle = C.goldHi; ctx.lineWidth = 22; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-HL, 0); ctx.lineTo(HL, 0); ctx.stroke();
+  // left end: coins (revenue)
+  const kc = easeOut(prog(lt, -0.1, 0.4));
+  for (let i = 0; i < 8; i++) coin(-HL + 120 - (i % 2) * 18, -14 - i * 28, 95, kc);
+  text('收入', -HL + 120, -270, { size: 48, weight: 700, color: C.goldHi, alpha: kc });
+  ctx.restore();
+  ctx.restore();
+  const ex = PX + HL * Math.cos(th), ey = PY + HL * Math.sin(th);
+  if (kd > 0) {
+    const y = lerp(-200, ey - 12, easeIn2(kd));
+    ctx.save(); ctx.translate(ex - 170 + shakeAt(lt, hit) * 1.4, y);
+    ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 40; roundRect(-250, -330, 500, 330, 16); ctx.fillStyle = '#2a2a30'; ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = C.goldHi; ctx.lineWidth = 5; ctx.stroke();
+    text('≈ 9000 亿', 0, -170, { size: 100, family: F.serif, weight: 900, color: C.goldHi });
+    text('美元 · 算力合同', 0, -90, { size: 44, weight: 700, color: C.text });
+    text('（未来要付的）', 0, -36, { size: 30, color: C.gray });
+    ctx.restore();
+    burst(ex - 170, ey, a, 1.2);
+  }
+}
+
+// ---------- J: end ----------
+function sceneEnd(lt, t) {
+  const k = easeOut(prog(lt, -0.1, 0.5));
+  bell(960, 200, 1.0, { t: lt, swing: 0.1 * Math.sin(lt * 3.2) * Math.exp(-0.2 * lt), mood: 1, glow: 0.5, a: k });
+  const g = ctx.createLinearGradient(-400, 0, 400, 0); g.addColorStop(0, '#B8935A'); g.addColorStop(0.5, '#FFF0C8'); g.addColorStop(1, '#B8935A');
+  ctx.save(); ctx.globalAlpha *= k; ctx.translate(960, 640); ctx.scale(lerp(1.08, 1, k), lerp(1.08, 1, k)); ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36; ctx.font = `900 124px ${F.serif}`; ctx.fillText('敲钟，只是开始', 0, 0); ctx.restore();
+  text('价格与日期，以公司公告为准', 960, 740, { size: 44, color: C.gray, alpha: prog(lt, b(1.2), b(1.8)) });
+}
+
+// ---------- compose ----------
+function render(t, frame = Math.round(t * TL.fps)) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  background(t, frame); glue(t); dust(t, 0.45);
+  sceneTitleCard(t);
+  scene(t, 'A_path', lt => sceneStairs(lt, t));
+  scene(t, 'B_rev', lt => sceneRevenue(lt, t));
+  scene(t, 'C_val', lt => sceneValue(lt, t));
+  scene(t, 'D_raise', lt => sceneRaise(lt, t));
+  scene(t, 'F_road', lt => sceneRoad(lt, t), { zout: 1 });
+  scene(t, 'E_bell', lt => sceneBell(lt, t), { zin: 1, zout: 1.0 });
+  scene(t, 'G_ctrl', lt => sceneControl(lt, t));
+  scene(t, 'H_bill', lt => sceneBill(lt, t));
+  scene(t, 'J_end', lt => sceneEnd(lt, t), { zin: 1, zout: 1, fi: 0.6, fo: 0.01 });
+  const L = (k, s2) => label(t, S[k][0] + 0.15, S[k][1] - 0.1, s2);
+  L('A_path', '上 市 路 径'); L('B_rev', '收 入'); L('C_val', '估 值'); L('D_raise', '能 募 多 少'); L('F_road', '接 下 来'); L('E_bell', '敲 钟');
+  L('G_ctrl', '控 制 权'); L('H_bill', '悬 念'); L('J_end', '展 望');
+  const s = (n0, n1, zh, en) => sub(t, T(n0) + 0.05, T(n1), zh, en);
+  s(4, 7.6, '6 月 1 日，保密递交上市文件', 'June 1: a confidential draft filing.');
+  s(7.6, 10.7, '10 月 26 日，文件公开，拟在纳斯达克上市', 'Oct 26: the filing goes public, for Nasdaq.');
+  s(10.7, 14, '今天，首次给出每股价格区间', 'Today: the first price range appears.');
+  s(14, 18.5, '先看收入：去年全年，是一块积木', 'Revenue: last year’s whole year is one block.');
+  s(18.5, 23, '今年前 9 个月，已经垒到 7 块多', 'This year’s first nine months stack up past seven.');
+  s(23, 27, '再看估值：2 月到 5 月，涨到约 2.5 倍', 'Valuation: up about 2.5× from February to May.');
+  s(27, 30, '上市估值多少，据报道还在谈', 'The IPO valuation is reportedly still being negotiated.');
+  s(30, 34.5, '按目前的价格区间，最多能募到约 640 亿美元', 'At today’s range, up to about $64 billion.');
+  s(34.5, 38, '价格区间只是估计，定价前还可能调整', 'It’s only an estimate and may change before pricing.');
+  s(38, 41, '接下来：路演、定价、挂牌', 'Next: roadshow, pricing, listing.');
+  s(41, 44, '据报道，最早下周就可能敲钟', 'Reportedly, the bell could ring as soon as next week.');
+  s(44, 47.6, '拟在纳斯达克上市，股票代码 ANT', 'Planned: Nasdaq, ticker ANT.');
+  s(47.6, 51, '这一声钟，要等定价和挂牌日公布才算数', 'It counts once pricing and the listing date are set.');
+  s(51, 54, '上市后谁说了算？创始人 1 股，握着一半投票权', 'Who’s in charge? One founder share holds half the votes.');
+  s(54, 57, '另有“长期利益信托”，能选出多数董事', 'A Long-Term Benefit Trust elects a board majority.');
+  s(57, 60, '天平另一头，是约 9000 亿美元的算力合同', 'On the other end: about $900B in compute commitments.');
+  s(60, 62, '收入能否继续狂奔，是最大的悬念', 'Can revenue keep sprinting? That’s the question.');
+  s(62, 66, '钟声响起之后，才是真正的考验', 'The bell is where the test begins.');
+  finish(t, frame);
+}
+
+window.ALL_TEXT = document.documentElement.innerHTML;
+window.ready = (async () => {
+  const sample = window.ALL_TEXT;
+  await Promise.all([
+    document.fonts.load(`900 92px ${F.serif}`, sample),
+    document.fonts.load(`400 40px ${F.sans}`, sample),
+    document.fonts.load(`700 40px ${F.sans}`, sample),
+    document.fonts.load(`italic 400 30px ${F.en}`, sample),
+  ]);
+  await document.fonts.ready;
+  return { duration: DURATION, frames: Math.ceil(DURATION * TL.fps) };
+})();
+window.render = render;
+</script>
+</body>
+</html>
