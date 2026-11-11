@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>cover</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<style>html,body{margin:0;background:#000}canvas{display:block}</style></head>
+<body><canvas id="c" width="1080" height="1440"></canvas>
+<script>
+// Covers: 3:4 (1080x1440) and 4:3 (#43, 1440x1080). Black ground, white + yellow heavy title, a pill subtitle,
+// and the golden bell mascot with a ticker board.
+const WIDE = location.hash === '#43';
+const W = WIDE ? 1440 : 1080, H = WIDE ? 1080 : 1440, cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d'), SANS = '"Noto Sans SC"';
+const rgb = (c, a = 1) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${a})`;
+const GOLDC = [232, 207, 148];
+function bell(x, y, sc) {                     // (x, y) = hanging point; same golden bell as in the video
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  ctx.shadowColor = 'rgba(232,207,148,0.7)'; ctx.shadowBlur = 70;
+  ctx.strokeStyle = '#8a6a32'; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, -34, 16, 0, 6.283); ctx.stroke();
+  const g = ctx.createLinearGradient(-130, 0, 130, 0); g.addColorStop(0, '#8a6a32'); g.addColorStop(0.3, '#F3DCA4'); g.addColorStop(0.6, '#C9A96A'); g.addColorStop(1, '#7a5b28'); ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(-36, 10); ctx.bezierCurveTo(-36, -22, 36, -22, 36, 10); ctx.bezierCurveTo(40, 100, 70, 140, 126, 176); ctx.lineTo(126, 200); ctx.lineTo(-126, 200); ctx.lineTo(-126, 176); ctx.bezierCurveTo(-70, 140, -40, 100, -36, 10); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(-136, 194, 272, 28, 14); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.beginPath(); ctx.ellipse(-62, 96, 12, 46, 0.25, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#E8CF94'; ctx.beginPath(); ctx.arc(0, 240, 21, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  [-36, 36].forEach(ex => { ctx.beginPath(); ctx.arc(ex, 124, 13, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); });
+  ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 142, 20, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  ctx.restore();
+}
+function orbC(x, gy, sc) {
+  ctx.save(); ctx.translate(x, gy); ctx.scale(sc, sc);
+  const g = ctx.createRadialGradient(-34, -190, 10, 0, -140, 120); g.addColorStop(0, '#F4F8FF'); g.addColorStop(0.55, '#A9B8D2'); g.addColorStop(1, '#52627E');
+  ctx.shadowColor = 'rgba(170,190,225,0.5)'; ctx.shadowBlur = 50; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, -140, 104, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#1f2635'; ctx.lineWidth = 7; ctx.lineCap = 'round'; [-36, 36].forEach(ex => { ctx.beginPath(); ctx.arc(ex, -134, 13, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); });
+  ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, -120, 20, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); ctx.restore();
+}
+function ticker(x, y, sc) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.shadowColor = 'rgba(232,207,148,0.6)'; ctx.shadowBlur = 40;
+  ctx.beginPath(); ctx.roundRect(-190, -110, 380, 220, 20); ctx.fillStyle = '#141414'; ctx.fill(); ctx.shadowBlur = 0; ctx.strokeStyle = '#C9A96A'; ctx.lineWidth = 5; ctx.stroke();
+  ctx.fillStyle = '#E8CF94'; ctx.textAlign = 'center'; ctx.font = `italic 700 120px "Noto Serif", serif`; ctx.fillText('ANT', 0, 40);
+  ctx.fillStyle = '#8E8E93'; ctx.font = `700 28px ${SANS}`; ctx.letterSpacing = '8px'; ctx.fillText('NASDAQ', 0, -62); ctx.restore();
+}
+function outlined(str, x, y, size, fill, stroke, lw, glow, align = 'center') {
+  ctx.save(); ctx.font = `900 ${size}px ${SANS}`; ctx.textAlign = align; ctx.lineJoin = 'round';
+  if (glow) { ctx.shadowColor = glow; ctx.shadowBlur = 36; }
+  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.strokeText(str, x, y); ctx.shadowBlur = 0; ctx.fillStyle = fill; ctx.fillText(str, x, y); ctx.restore();
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function glow(x, y, r, col, a) { const g = ctx.createRadialGradient(x, y, 20, x, y, r); g.addColorStop(0, rgb(col, a)); g.addColorStop(1, rgb(col, 0)); ctx.fillStyle = g; ctx.fillRect(x - r, y - r, 2 * r, 2 * r); }
+function pill(cx, y, w, h, font, str) {
+  ctx.save(); rr(cx - w / 2, y, w, h, h / 2); ctx.fillStyle = '#000'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.stroke(); ctx.restore();
+  ctx.save(); ctx.font = `900 ${font}px ${SANS}`; ctx.letterSpacing = '8px'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(str, cx + 4, y + h * 0.7); ctx.restore();
+}
+function spark(x, y, r) {                                       // a small gold star between the two animals
+  ctx.save(); ctx.shadowColor = 'rgba(255,220,120,0.9)'; ctx.shadowBlur = 30; ctx.fillStyle = '#FFE08A'; ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const rad = i % 2 ? r * 0.28 : r, an = i / 8 * 6.283 - Math.PI / 2; ctx.lineTo(x + Math.cos(an) * rad, y + Math.sin(an) * rad); } ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function draw() {
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  if (!WIDE) {
+    glow(540, 1050, 640, GOLDC, 0.32);
+    outlined('Anthropic vs OpenAI', 540, 215, 100, '#ffffff', '#000', 14, 'rgba(255,255,255,0.35)');
+    outlined('AI双雄上市战', 540, 450, 158, '#fff200', '#000', 18, 'rgba(255,230,0,0.45)');
+    pill(540, 540, 760, 104, 62, '科技圈怎么变？');
+    bell(350, 780, 1.9); orbC(790, 1290, 1.6);
+    ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', 540, 1412); ctx.restore();
+  } else {
+    glow(1000, 700, 560, GOLDC, 0.32);
+    outlined('Anthropic vs OpenAI', 470, 200, 84, '#ffffff', '#000', 13, 'rgba(255,255,255,0.35)', 'center');
+    outlined('AI双雄上市战', 470, 410, 128, '#fff200', '#000', 17, 'rgba(255,230,0,0.45)', 'center');
+    pill(470, 480, 640, 96, 54, '科技圈怎么变？');
+    bell(1010, 300, 1.5); orbC(1250, 960, 1.3);
+    ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', W / 2, 1050); ctx.restore();
+  }
+}
+window.ready = (async () => {
+  const sample = 'Anthropic vs OpenAIAI双雄上市战科技圈怎么变？@比特双子';
+  await Promise.all([document.fonts.load(`900 100px ${SANS}`, sample), document.fonts.load(`700 26px ${SANS}`, sample)]);
+  await document.fonts.ready; draw(); return true;
+})();
+</script></body></html>

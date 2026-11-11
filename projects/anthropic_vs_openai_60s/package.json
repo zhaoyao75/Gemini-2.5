@@ -1,0 +1,15 @@
+{
+  "name": "anthropic-vs-openai-60s",
+  "private": true,
+  "description": "美国中期选举 90 秒科普：代码渲染视频（沿用 vibe知识大赏 工程架构）",
+  "scripts": {
+    "bgm": "python3 src/bgm.py",
+    "keyframes": "node src/render.js --keyframes",
+    "render": "node src/render.js"
+  },
+  "dependencies": {
+    "@fontsource/eb-garamond": "5.1.1",
+    "@fontsource/noto-sans-sc": "5.1.1",
+    "@fontsource/noto-serif-sc": "5.1.1"
+  }
+}

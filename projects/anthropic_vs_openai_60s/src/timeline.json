@@ -1,0 +1,21 @@
+{
+ "fps": 30,
+ "bpm": 66,
+ "intro_seconds": 1.0,
+ "total_beats": 66,
+ "tail_seconds": 0.5,
+ "scenes_beats": {
+  "D_title": [0, 4],
+  "A_race": [4, 14],
+  "B_rev": [14, 23],
+  "C_val": [23, 30],
+  "D_flow": [30, 38],
+  "F_back": [38, 44],
+  "E_bell": [44, 51],
+  "G_slow": [51, 57],
+  "H_watch": [57, 62],
+  "J_end": [62, 66]
+ },
+ "sfx_beats": [],
+ "watermark": "@比特双子"
+}

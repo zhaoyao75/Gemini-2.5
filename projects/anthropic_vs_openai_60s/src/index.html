@@ -1,0 +1,714 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Anthropic vs OpenAI</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-serif-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/eb-garamond/400-italic.css">
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Every frame is a pure function of time t (seconds). No requestAnimationFrame,
+// no Date, no unseeded randomness — so frame-by-frame rendering is repeatable.
+const TL = window.TL;                 // injected by render.js from timeline.json
+const BEAT = 60 / TL.bpm;
+const b = n => n * BEAT;              // beat index -> seconds
+// The title card lasts INTRO seconds; beat n >= TB is placed INTRO + (n - TB) beats into the video.
+const INTRO = TL.intro_seconds, TB = TL.scenes_beats.D_title[1];
+const T = n => n < TB ? n / TB * INTRO : INTRO + (n - TB) * BEAT;
+const S = Object.fromEntries(Object.entries(TL.scenes_beats).map(([k, [s, e]]) => [k, [T(s), T(e)]]));
+const DURATION = T(TL.total_beats) + TL.tail_seconds;
+
+const W = 1920, H = 1080;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---------- palette & fonts ----------
+const C = {
+  bgIn: '#0e0e0e', bgOut: '#000000',
+  text: '#EAEAF2', gray: '#8E8E93', gold: '#C9A96A', goldHi: '#E8CF94',
+  paper: '#EDE4D3', red: '#B53A2F',
+};
+const F = {
+  serif: '"Noto Serif SC"',
+  sans: '"Noto Sans SC"',
+  en: '"EB Garamond"',
+};
+
+// ---------- math helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const easeIO = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// fade in over fi, hold, fade out over fo, inside [t0, t1]
+const window01 = (t, t0, t1, fi = 0.4, fo = 0.35) => Math.min(prog(t, t0, t0 + fi), 1 - prog(t, t1 - fo, t1));
+
+// ---------- static random fields (seeded) ----------
+const STARS = (() => { const r = mulberry32(7); return Array.from({ length: 220 }, () => ({ x: r() * W, y: r() * H, s: 0.4 + r() * 1.3, ph: r() * 6.28, sp: 0.4 + r() * 1.2 })); })();
+const DUST = (() => { const r = mulberry32(11); return Array.from({ length: 46 }, () => ({ x: r() * W, y: r() * H, s: 0.8 + r() * 2.2, vx: (r() - .5) * 14, vy: -6 - r() * 16, ph: r() * 6.28 })); })();
+
+// ---------- text helpers ----------
+function text(str, x, y, { size = 40, family = F.sans, weight = 400, color = C.text, align = 'center', alpha = 1, italic = false, spacing = 0, baseline = 'alphabetic' } = {}) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${family}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  ctx.letterSpacing = spacing + 'px';
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// Bilingual subtitle band at 85–91% height
+function subtitle(t, t0, t1, zh, en) {
+  const a = window01(t, t0, t1);
+  if (a <= 0) return;
+  const rise = (1 - easeOut(prog(t, t0, t0 + 0.4))) * 8;
+  text(zh, W / 2, 948 + rise, { size: 46, weight: 700, alpha: a, spacing: 2 });
+  text(en, W / 2, 996 + rise, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+}
+
+// Small note band at ~70% height
+function note(t, t0, t1, str, x = W / 2, y = 790) {
+  const a = window01(t, t0, t1, 0.35, 0.3);
+  text(str, x, y, { size: 24, color: C.gray, alpha: a, spacing: 1 });
+}
+
+function topLabel(t, t0, t1, str) {
+  const a = window01(t, t0, t1, 0.5, 0.4);
+  if (a <= 0) return;
+  text(str, W / 2, 74, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+  ctx.save(); ctx.globalAlpha = a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92); ctx.lineTo(W / 2 + 40, 92); ctx.stroke(); ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function heart(x, y, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, 3);
+  ctx.bezierCurveTo(-7, -3, -4, -9, 0, -5); ctx.bezierCurveTo(4, -9, 7, -3, 0, 3);
+  ctx.fill(); ctx.restore();
+}
+
+function glowDot(x, y, r, color, glow, alpha = 1) {
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * glow);
+  g.addColorStop(0, color); g.addColorStop(0.25, color.replace(/[\d.]+\)$/, '0.35)')); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * glow, 0, 6.283); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- background ----------
+function background(t, frame) {
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, 80, W / 2, H * 0.5, W * 0.7);
+  g.addColorStop(0, C.bgIn); g.addColorStop(1, C.bgOut);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of STARS) {
+    const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * s.sp + s.ph));
+    ctx.fillStyle = `rgba(220,220,240,${a})`;
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+}
+function dust(t, alpha = 1) {
+  for (const d of DUST) {
+    const x = ((d.x + d.vx * t) % W + W) % W;
+    const y = ((d.y + d.vy * t) % H + H) % H;
+    const a = alpha * (0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.3 + d.ph)));
+    ctx.fillStyle = `rgba(232,207,148,${a})`;
+    ctx.beginPath(); ctx.arc(x, y, d.s, 0, 6.283); ctx.fill();
+  }
+}
+function finish(t, frame) {
+  // vignette
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // film grain, reseeded every frame
+  const r = mulberry32(1000 + frame);
+  for (let i = 0; i < 1800; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(r() * W, r() * H, 2, 2);
+  }
+  // watermark
+  text(TL.watermark, 60, 74, { size: 24, align: 'left', color: C.text, alpha: 0.35 });
+  // end fade (sample only)
+  const k = prog(t, DURATION - 0.6, DURATION);
+  if (k > 0) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// =====================================================================
+//  《熬一个通宵 ≈ 醉驾？》
+//  Transitions: neighbouring scenes overlap and "push" through each other (old one shrinks and
+//  fades while the new one settles from slightly larger), so there is never a dark gap.
+// =====================================================================
+const AMBER = '#E8A33A', RED = '#E0554A';
+const DRIFT = t => [6 * Math.sin(t * 0.31), 4 * Math.sin(t * 0.23 + 1)];
+function scene(t, key, fn, o = {}) {
+  const [s0, s1] = S[key];
+  const fi = o.fi ?? 0.45, fo = o.fo ?? 0.4;
+  // staggered hand-over: the old scene is almost gone by the boundary, the new one pushes in right after it
+  const kin = s0 <= 0 ? 1 : easeOut(prog(t, s0 - 0.1, s0 - 0.1 + fi));
+  const kout = easeIO(prog(t, s1 - fo + 0.1, s1 + 0.1));
+  if (kin <= 0 || kout >= 1) return;
+  const sc = lerp(o.zin ?? 1.07, 1, kin) * lerp(1, o.zout ?? 0.93, kout) * (1 + 0.035 * prog(t, s0, s1));   // slow push-in inside every scene
+  const [dx, dy] = DRIFT(t);
+  ctx.save(); ctx.globalAlpha *= kin * (1 - kout);
+  ctx.translate(W / 2 + dx, 470 + dy); ctx.scale(sc, sc); ctx.translate(-W / 2, -470);
+  fn(t - s0);
+  ctx.restore();
+}
+// subtitles / labels slide: in from below, out upwards — consecutive lines hand over without a dip
+function slideText(t, t0, t1, draw) {
+  const kin = easeOut(prog(t, t0, t0 + 0.18)), kout = easeIO(prog(t, t1 - 0.16, t1));
+  const a = kin * (1 - kout); if (a <= 0) return;
+  draw(a, (1 - kin) * 16 - kout * 14);
+}
+function sub(t, t0, t1, zh, en) {
+  slideText(t, t0, t1, (a, dy) => {
+    text(zh, W / 2, 948 + dy, { size: 46, weight: 700, alpha: a, spacing: 2 });
+    text(en, W / 2, 996 + dy, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+  });
+}
+function label(t, t0, t1, str) {
+  slideText(t, t0, t1, (a, dy) => {
+    text(str, W / 2, 74 + dy, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+    ctx.save(); ctx.globalAlpha *= a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92 + dy); ctx.lineTo(W / 2 + 40, 92 + dy); ctx.stroke(); ctx.restore();
+  });
+}
+
+// ---------- reusable drawings ----------
+function clockFace(x, y, R, hours, a = 1, glow = 0) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  if (glow > 0) { const g = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 1.6); g.addColorStop(0, `rgba(232,207,148,${0.18 * glow})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * 1.6, 0, 6.283); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(234,234,242,0.85)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.283); ctx.stroke();
+  for (let i = 0; i < 60; i++) { const an = i / 60 * 6.283, big = i % 5 === 0; ctx.strokeStyle = big ? 'rgba(234,234,242,0.9)' : 'rgba(234,234,242,0.3)'; ctx.lineWidth = big ? 5 : 2; ctx.beginPath(); ctx.moveTo(Math.cos(an) * (R - (big ? 26 : 12)), Math.sin(an) * (R - (big ? 26 : 12))); ctx.lineTo(Math.cos(an) * (R - 6), Math.sin(an) * (R - 6)); ctx.stroke(); }
+  const ha = (hours % 12) / 12 * 6.283 - Math.PI / 2, ma = (hours % 1) * 6.283 - Math.PI / 2;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = C.goldHi; ctx.lineWidth = 12; ctx.shadowColor = 'rgba(232,207,148,0.6)'; ctx.shadowBlur = 16;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ha) * R * 0.5, Math.sin(ha) * R * 0.5); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ma) * R * 0.78, Math.sin(ma) * R * 0.78); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.fillStyle = C.goldHi; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+function hhmm(h) { h = ((h % 24) + 24) % 24; const H = Math.floor(h), M = Math.floor((h - H) * 60); return String(H).padStart(2, '0') + ':' + String(M).padStart(2, '0'); }
+function card(x, y, w, h, a = 1, glow = 0.45) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = `rgba(232,207,148,${glow})`; ctx.shadowBlur = 36;
+  roundRect(x - w / 2, y - h / 2, w, h, 20); ctx.fillStyle = '#141414'; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(201,169,106,0.55)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+}
+function noteCard(x, y, w, big, small, rot, k, a = 1) {
+  if (k <= 0) return;
+  const drop = (1 - easeOut(Math.min(1, k))) * 260;
+  ctx.save(); ctx.globalAlpha *= a * Math.min(1, k * 3); ctx.translate(x, y - drop); ctx.rotate(rot);
+  ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+  roundRect(-w / 2, -110, w, 220, 8); ctx.fillStyle = '#EDE4D3'; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  text(big, 0, -6, { size: 40, weight: 700, color: '#2a2118' });
+  text(small, 0, 52, { size: 24, color: '#6b5a40' });
+  ctx.restore();
+}
+
+// ---------- shared characters & effects ----------
+function person(x, y, s, col = C.goldHi, rot = 0, a = 1) {   // (x, y) = feet
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -62, 17, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-27, 0); ctx.quadraticCurveTo(-29, -40, 0, -40); ctx.quadraticCurveTo(29, -40, 27, 0); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+const SPARKS = (() => { const r = mulberry32(97); return Array.from({ length: 28 }, () => ({ an: r() * 6.283, sp: 220 + r() * 520, s: 2 + r() * 4, red: r() < 0.5 })); })();
+function burst(x, y, age, scale = 1) {
+  if (age < 0 || age > 0.8) return;
+  SPARKS.forEach(p => {
+    const d = p.sp * scale * (age - 0.6 * age * age), a = 1 - age / 0.8;
+    ctx.fillStyle = p.red ? `rgba(224,85,74,${a})` : `rgba(245,214,150,${a})`;
+    ctx.beginPath(); ctx.arc(x + Math.cos(p.an) * d, y + Math.sin(p.an) * d, p.s * (1 - age), 0, 6.283); ctx.fill();
+  });
+}
+
+const BLUE = [91, 141, 239], REDP = [210, 73, 63], GREYP = [106, 110, 122], PALE = [169, 195, 245], DIMC = [70, 74, 88], DIMR = [150, 62, 58];
+const rgb = (c, a = 1) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${a})`;
+const mixc = (c1, c2, k) => [lerp(c1[0], c2[0], k), lerp(c1[1], c2[1], k), lerp(c1[2], c2[2], k)];
+const shakeAt = (t, t0) => { const a = t - t0; return a > 0 && a < 0.5 ? 8 * Math.exp(-9 * a) * Math.sin(70 * a) : 0; };
+const pulseAt = (t, t0, w = 0.16) => Math.exp(-Math.pow((t - t0) / w, 2));
+const ovAlpha = (t, s0, s1) => easeOut(prog(t, s0 - 0.1, s0 + 0.35)) * (1 - easeIO(prog(t, s1 - 0.3, s1 + 0.1)));
+// ---------- the balance scale (also the huge faint glue layer) ----------
+function balance(x, y, s, tilt, a = 1, line = 'rgba(234,234,242,0.9)', lw = 6) {
+  const L = 280, ex = L * Math.cos(tilt), ey = L * Math.sin(tilt);
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.strokeStyle = line; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 330); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-120, 345); ctx.lineTo(120, 345); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-ex, -ey); ctx.lineTo(ex, ey); ctx.stroke();
+  [[-ex, -ey], [ex, ey]].forEach(([px, py]) => {
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - 70, py + 150); ctx.moveTo(px, py); ctx.lineTo(px + 70, py + 150); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px, py + 150, 70, 0, Math.PI); ctx.stroke();
+  });
+  ctx.fillStyle = line; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.283); ctx.fill();
+  ctx.restore();
+  return { L: [x - ex * s, y + (-ey + 150) * s], R: [x + ex * s, y + (ey + 150) * s] };
+}
+function glue(t) {
+  balance(W / 2, 300, 1.55, 0.14 * Math.sin(t * 0.35), 0.07, 'rgba(234,234,242,1)', 3);
+  let p = 0; Object.entries(S).forEach(([k, [s0]]) => { if (s0 > 0) p = Math.max(p, Math.exp(-Math.pow((t - s0) / 0.22, 2))); });
+  if (p > 0.01) { const g = ctx.createRadialGradient(W / 2, 470, 20, W / 2, 470, 900); g.addColorStop(0, `rgba(232,207,148,${0.13 * p})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+}
+function stamp2(x, y, rot, w, str, size, k, col) {
+  if (k <= 0) return;
+  const hh = Math.max(112, size * 1.6);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); const ss = lerp(2.6, 1, easeOut(k)); ctx.scale(ss, ss); ctx.globalAlpha *= Math.min(1, k * 4);
+  ctx.strokeStyle = col; ctx.lineWidth = 8; roundRect(-w / 2, -hh / 2, w, hh, 12); ctx.stroke(); ctx.lineWidth = 3; roundRect(-w / 2 + 12, -hh / 2 + 12, w - 24, hh - 24, 8); ctx.stroke();
+  text(str, 0, size * 0.36, { size, family: F.serif, weight: 900, color: col, spacing: 4 }); ctx.restore();
+}
+function tagCard(x, y, str, a = 1, size = 36, w = 340, col = null) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8; roundRect(-w / 2, -32, w, 64, 10); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowColor = 'transparent';
+  if (col) { ctx.fillStyle = rgb(col); ctx.fillRect(-w / 2, -32, 10, 64); }
+  text(str, 6, size * 0.36, { size, weight: 700, color: '#2a2118' }); ctx.restore();
+}
+
+function easeIn2(k) { return k * k; }
+const GOLD = [201, 169, 106], GOLDH = [232, 207, 148];
+
+// ---------- the golden bell mascot: (x, y) = hanging point, body hangs below ----------
+function bell(x, y, s, o = {}) {
+  const { swing = 0, mood = 1, t = 0, a = 1, glow = 0, clap = 0, feet = false, squash = 0 } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(swing); ctx.scale(s * (1 + squash * 0.06), s * (1 - squash * 0.08));
+  if (glow > 0) { ctx.shadowColor = `rgba(232,207,148,${0.8 * glow})`; ctx.shadowBlur = 60 * glow; }
+  ctx.strokeStyle = '#8a6a32'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(0, -34, 16, 0, 6.283); ctx.stroke();
+  const g = ctx.createLinearGradient(-130, 0, 130, 0);
+  g.addColorStop(0, '#8a6a32'); g.addColorStop(0.3, '#E8CF94'); g.addColorStop(0.6, '#C9A96A'); g.addColorStop(1, '#7a5b28');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(-36, 10); ctx.bezierCurveTo(-36, -22, 36, -22, 36, 10);
+  ctx.bezierCurveTo(40, 100, 70, 140, 126, 176); ctx.lineTo(126, 200); ctx.lineTo(-126, 200); ctx.lineTo(-126, 176);
+  ctx.bezierCurveTo(-70, 140, -40, 100, -36, 10); ctx.closePath(); ctx.fill();
+  roundRect(-136, 194, 272, 28, 14); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.beginPath(); ctx.ellipse(-62, 96, 12, 46, 0.25, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#E8CF94'; ctx.beginPath(); ctx.arc(clap * 30, 240, 21, 0, 6.283); ctx.fill();
+  const bl = Math.sin(t * 2.1) > 0.96 ? 0.15 : 1;
+  [-36, 36].forEach(ex => {
+    if (mood > 0.5) { ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(ex, 124, 13, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, 120, 12, 15 * bl, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#2a2118'; ctx.beginPath(); ctx.ellipse(ex + 2, 122, 6, 8 * bl, 0, 0, 6.283); ctx.fill(); }
+  });
+  ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 142, mood > 0.5 ? 20 : 10, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  if (feet) { ctx.fillStyle = '#7a5b28'; roundRect(-96, 222, 60, 26, 12); ctx.fill(); roundRect(36, 222, 60, 26, 12); ctx.fill(); }
+  ctx.restore();
+}
+function coin(x, y, r, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  ctx.fillStyle = '#C9A96A'; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.42, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#E8CF94'; ctx.beginPath(); ctx.ellipse(0, -r * 0.1, r * 0.78, r * 0.28, 0, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+const bigNum = (str, x, y, size, a = 1, k = 1) => {
+  const sc = lerp(1.35, 1, easeOut(clamp(k)));
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  ctx.shadowColor = 'rgba(232,207,148,0.5)'; ctx.shadowBlur = 40;
+  text(str, 0, 0, { size, family: F.serif, weight: 900, color: C.goldHi, alpha: a * Math.min(1, k * 4) });
+  ctx.restore();
+};
+
+function arrow(x, y, s, up, col, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, up ? -s : s); ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(0, 50); ctx.lineTo(-38, 8); ctx.lineTo(-14, 8); ctx.lineTo(-14, -50); ctx.lineTo(14, -50); ctx.lineTo(14, 8); ctx.lineTo(38, 8); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+// ---------- the silver orb mascot (stand-in for OpenAI; not their logo): (x, y) = ground ----------
+function orb(x, y, s, o = {}) {
+  const { mood = 0, t = 0, a = 1, feet = true, squash = 0, hop = 0 } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y - hop); ctx.scale(s * (1 + squash * 0.1), s * (1 - squash * 0.12));
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 4 + hop * 0.2, 90, 12, 0, 0, 6.283); ctx.fill();
+  if (feet) { ctx.fillStyle = '#56627a'; roundRect(-62, -34, 46, 34, 14); ctx.fill(); roundRect(16, -34, 46, 34, 14); ctx.fill(); }
+  const g = ctx.createRadialGradient(-34, -190, 10, 0, -140, 120); g.addColorStop(0, '#F4F8FF'); g.addColorStop(0.55, '#A9B8D2'); g.addColorStop(1, '#52627E');
+  ctx.shadowColor = 'rgba(170,190,225,0.35)'; ctx.shadowBlur = 40; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, -140, 104, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.ellipse(-52, -186, 14, 34, 0.5, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = '#1f2635'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  [-36, 36].forEach(ex => {
+    if (mood > 0.5) { ctx.beginPath(); ctx.arc(ex, -134, 13, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    else { const bl = Math.sin(t * 2.0 + ex) > 0.96 ? 0.15 : 1; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, -138, 12, 15 * bl, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#1f2635'; ctx.beginPath(); ctx.ellipse(ex + 2, -136, 6, 8 * bl, 0, 0, 6.283); ctx.fill();
+      if (mood < -0.5) { ctx.beginPath(); ctx.moveTo(ex - 14 * Math.sign(ex), -168 + 8 * Math.sign(ex) * -1); ctx.lineTo(ex + 14 * Math.sign(ex), -160); ctx.stroke(); } }
+  });
+  ctx.lineWidth = 6; ctx.beginPath();
+  if (mood > 0.5) ctx.arc(0, -120, 20, 0.15 * Math.PI, 0.85 * Math.PI); else if (mood < -0.5) ctx.arc(0, -96, 16, 1.15 * Math.PI, 1.85 * Math.PI); else { ctx.moveTo(-14, -106); ctx.lineTo(14, -106); }
+  ctx.stroke();
+  if (mood < -0.5) { ctx.fillStyle = 'rgba(140,200,255,0.9)'; ctx.beginPath(); ctx.ellipse(86, -150 + 5 * Math.sin(t * 5), 6, 10, 0, 0, 6.283); ctx.fill(); }
+  ctx.restore();
+}
+const SILV = '#BFCBE0';
+function pole(x, y, h, col, a = 1) { ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - h); ctx.stroke(); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 12, 0, 6.283); ctx.fill(); ctx.restore(); }
+
+// ---------- title card ----------
+function sceneTitleCard(t) {
+  const [, d1] = S.D_title, kout = easeIO(prog(t, d1 - 0.3, d1 + 0.1));
+  if (kout >= 1) return;
+  const slam = easeOut(prog(t, 0, 0.28)), sc = lerp(1.18, 1, slam) * lerp(1, 0.92, kout);
+  ctx.save(); ctx.globalAlpha = 1 - kout; ctx.translate(W / 2, 500); ctx.scale(sc, sc);
+  bell(-640, -250, 1.05, { t, swing: 0.12 * Math.sin(t * 7), mood: 1, glow: 0.4 });
+  orb(660, 330, 1.25, { t, mood: 1 });
+  const g = ctx.createLinearGradient(-360, 0, 360, 0), sw = clamp(t / 0.8);
+  g.addColorStop(0, '#B8935A'); g.addColorStop(clamp(sw - 0.12), '#C9A96A'); g.addColorStop(sw, '#FFF0C8'); g.addColorStop(clamp(sw + 0.12), '#C9A96A'); g.addColorStop(1, '#B8935A');
+  ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36;
+  ctx.font = `900 84px ${F.serif}`; ctx.fillText('Anthropic vs OpenAI', 0, -60);
+  ctx.font = `900 150px ${F.serif}`; ctx.fillText('AI双雄上市战', 0, 95);
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha *= 0.6; ctx.strokeStyle = C.gold; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-220, 140); ctx.lineTo(220, 140); ctx.stroke(); ctx.globalAlpha /= 0.6;
+  text('对科技圈意味着什么', 0, 212, { size: 56, weight: 700, spacing: 10 });
+  text('Anthropic vs. OpenAI — and what it means for tech', 0, 262, { size: 30, family: F.en, italic: true, color: C.gray });
+  ctx.restore();
+  const flash = Math.exp(-t / 0.09) * 0.55; if (flash > 0.01) { ctx.fillStyle = `rgba(255,240,210,${flash})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- more characters & props ----------
+const bellG = (x, gy, s, o = {}) => bell(x, gy - 238 * s, s, Object.assign({ feet: true }, o));
+function cloud(x, y, s, o = {}) {                       // a friendly cloud (cloud platform)
+  const { t = 0, mood = 1, chew = 0, a = 1, label = '' } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y + 8 * Math.sin(t * 2 + x)); ctx.scale(s * (1 + 0.05 * chew * Math.sin(t * 24)), s * (1 - 0.04 * chew * Math.sin(t * 24)));
+  const g = ctx.createLinearGradient(0, -90, 0, 70); g.addColorStop(0, '#F7FAFF'); g.addColorStop(1, '#AEBBD2'); ctx.fillStyle = g;
+  ctx.shadowColor = 'rgba(190,205,235,0.35)'; ctx.shadowBlur = 30;
+  [[-70, 10, 52], [0, -26, 68], [70, 8, 54], [-20, 22, 62], [30, 24, 58]].forEach(([cx, cy, r]) => { ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.283); ctx.fill(); });
+  ctx.shadowBlur = 0; ctx.strokeStyle = '#1f2635'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  [-30, 30].forEach(ex => { ctx.beginPath(); if (mood > 0.5) ctx.arc(ex, 0, 11, Math.PI * 1.1, Math.PI * 1.9); else { ctx.moveTo(ex - 8, 0); ctx.lineTo(ex + 8, 0); } ctx.stroke(); });
+  ctx.fillStyle = '#7a3f3f'; ctx.beginPath(); if (chew > 0) ctx.ellipse(0, 34, 16, 10 + 6 * Math.abs(Math.sin(t * 24)), 0, 0, 6.283); else ctx.arc(0, 26, 16, 0.1 * Math.PI, 0.9 * Math.PI); chew > 0 ? ctx.fill() : ctx.stroke();
+  ctx.restore();
+  if (label) text(label, x, y + 118 * s, { size: 36, weight: 700, color: C.text, alpha: a });
+}
+function chipChar(x, gy, s, o = {}) {                   // a chip with a face (chipmaker)
+  const { t = 0, mood = 1, a = 1, hop = 0, label = '' } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, gy - hop); ctx.scale(s, s);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 4, 90, 11, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#C9A96A'; for (let i = 0; i < 5; i++) { const px = -64 + i * 32; roundRect(px - 7, -190, 14, 26, 4); ctx.fill(); roundRect(px - 7, -26, 14, 26, 4); ctx.fill(); roundRect(-110, -150 + i * 28, 26, 14, 4); ctx.fill(); roundRect(84, -150 + i * 28, 26, 14, 4); ctx.fill(); }
+  const g = ctx.createLinearGradient(0, -190, 0, -20); g.addColorStop(0, '#3a3f4c'); g.addColorStop(1, '#1d2027'); ctx.fillStyle = g; ctx.strokeStyle = '#E8CF94'; ctx.lineWidth = 6; roundRect(-90, -170, 180, 150, 18); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = '#E8CF94'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  [-34, 34].forEach(ex => { ctx.beginPath(); if (mood > 0.5) ctx.arc(ex, -108, 12, Math.PI * 1.1, Math.PI * 1.9); else { ctx.moveTo(ex - 8, -108); ctx.lineTo(ex + 8, -108); } ctx.stroke(); });
+  ctx.beginPath(); ctx.arc(0, -90, 18, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  ctx.restore();
+  if (label) text(label, x, gy + 46 * s, { size: 36, weight: 700, color: C.text, alpha: a });
+}
+function sparkle(x, y, r, a) { ctx.save(); ctx.globalAlpha *= a; ctx.fillStyle = '#FFF0C8'; ctx.beginPath(); for (let i = 0; i < 8; i++) { const rad = i % 2 ? r * 0.25 : r, an = i / 8 * 6.283 - Math.PI / 2; ctx.lineTo(x + Math.cos(an) * rad, y + Math.sin(an) * rad); } ctx.closePath(); ctx.fill(); ctx.restore(); }
+function stars(x, y, t, a) { for (let i = 0; i < 3; i++) { const an = t * 6 + i * 2.094; sparkle(x + Math.cos(an) * 60, y + Math.sin(an) * 18, 14, a); } }
+function dustPuff(x, y, age) { if (age < 0 || age > 0.6) return; for (let i = 0; i < 5; i++) { const d = (i - 2) * 26 * (age + 0.2); ctx.fillStyle = `rgba(220,215,200,${0.5 * (1 - age / 0.6)})`; ctx.beginPath(); ctx.arc(x + d, y - 6 - 24 * age * (1 - Math.abs(i - 2) * 0.2), 14 * (1 + age * 1.5), 0, 6.283); ctx.fill(); } }
+function hourglass(x, y, s, p, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.strokeStyle = SILV; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(-34, -60); ctx.lineTo(34, -60); ctx.lineTo(4, 0); ctx.lineTo(34, 60); ctx.lineTo(-34, 60); ctx.lineTo(-4, 0); ctx.closePath(); ctx.stroke();
+  ctx.fillStyle = '#E8CF94'; const top = 1 - p; ctx.beginPath(); ctx.moveTo(-28 * top, -56 + 56 * p); ctx.lineTo(28 * top, -56 + 56 * p); ctx.lineTo(3, -4); ctx.lineTo(-3, -4); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(3, 0); ctx.lineTo(3, 56 - 40 * p); ctx.lineTo(-3, 56 - 40 * p); ctx.fill(); ctx.beginPath(); ctx.moveTo(-30 * p, 56); ctx.lineTo(30 * p, 56); ctx.lineTo(0, 56 - 38 * p); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function sign(x, y, w, big, small, k, col = C.goldHi) {         // a signboard that pops up
+  if (k <= 0) return; const sc = clamp(easeBack(clamp(k)), 0, 1.1);
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.globalAlpha *= clamp(k * 3);
+  ctx.strokeStyle = '#8a6a32'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(0, 60); ctx.lineTo(0, 150); ctx.stroke();
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 20; roundRect(-w / 2, -60, w, 124, 12); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = col; ctx.fillRect(-w / 2, -60, w, 12);
+  text(big, 0, 10, { size: 46, weight: 700, family: F.serif, color: '#2a2118' }); text(small, 0, 46, { size: 26, color: '#6b5a40' }); ctx.restore();
+}
+const lerpKeys = (v, keys) => { for (let i = 1; i < keys.length; i++) if (v <= keys[i][0]) { const [a, xa] = keys[i - 1], [c, xc] = keys[i]; return lerp(xa, xc, easeIO(prog(v, a, c))); } return keys[keys.length - 1][1]; };
+
+// ---------- A: the race — the bell sprints to the Nasdaq arch; the orb hits a wall ----------
+function sceneRace(lt, t) {
+  const GY1 = 480, GY2 = 800, AX = 1580;
+  const k0 = easeOut(prog(lt, -0.2, 0.5));
+  ctx.save(); ctx.globalAlpha *= k0; ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(232,207,148,0.55)'; ctx.lineWidth = 6; ctx.setLineDash([30, 20]); ctx.lineDashOffset = -lt * 120; ctx.beginPath(); ctx.moveTo(120, GY1 + 6); ctx.lineTo(1800, GY1 + 6); ctx.stroke();
+  ctx.strokeStyle = 'rgba(191,203,224,0.55)'; ctx.beginPath(); ctx.moveTo(120, GY2 + 6); ctx.lineTo(1800, GY2 + 6); ctx.stroke(); ctx.setLineDash([]);
+  // the Nasdaq arch
+  ctx.strokeStyle = C.goldHi; ctx.lineWidth = 16; ctx.shadowColor = 'rgba(232,207,148,0.5)'; ctx.shadowBlur = 30; ctx.beginPath(); ctx.moveTo(AX - 120, GY2 + 10); ctx.lineTo(AX - 120, 230); ctx.lineTo(AX + 120, 230); ctx.lineTo(AX + 120, GY2 + 10); ctx.stroke(); ctx.shadowBlur = 0;
+  ctx.restore();
+  text('NASDAQ', AX, 190, { size: 44, family: F.en, italic: true, color: C.goldHi, alpha: k0, spacing: 6 });
+  // bell
+  const bxK = [[0, 300], [1.2, 420], [3.4, 880], [5.6, 1250], [7.6, 1580]];
+  const bx = lerpKeys(lt / BEAT, bxK), moving = lt / BEAT < 7.6 && Math.abs(bx - lerpKeys(lt / BEAT - 0.05, bxK)) > 0.2;
+  const hop = moving ? Math.abs(Math.sin(lt * 9)) * 26 : 0;
+  const stat = [[1.2, 420, '6月', '保密递交'], [3.4, 880, '10月26日', '公开文件'], [5.6, 1250, '11月10日', '启动路演']];
+  stat.forEach(([bt, x, d, tg]) => sign(x, GY1 - 250, 300, d, tg, prog(lt, b(bt) - 0.5, b(bt) - 0.1)));
+  stat.forEach(([bt, x]) => { sparkle(x + 60, GY1 - 140, 20, pulseAt(lt, b(bt), 0.3)); dustPuff(x, GY1, lt - b(bt) + 0.1); });
+  bellG(bx, GY1 - hop, 0.62, { t: lt, mood: 1, swing: moving ? 0.1 * Math.sin(lt * 9) : 0.05 * Math.sin(lt * 3), glow: bx > 1500 ? 0.8 : 0.2, squash: hop < 2 ? 0.5 : 0 });
+  if (lt > b(7.6)) { const a = lt - b(7.6); burst(AX, GY1 - 200, a, 1.3); for (let i = 0; i < 14; i++) { const an = i * 0.9, d = 160 + 30 * i, yy = 230 + ((a * 260 + i * 70) % 500); ctx.fillStyle = i % 2 ? '#E8CF94' : '#E0554A'; ctx.fillRect(AX - 200 + (i * 29) % 400 + 20 * Math.sin(a * 5 + i), yy, 10, 16); } }
+  // orb
+  const oxK = [[0, 300], [1.2, 420], [3.4, 740]];
+  const ox = lerpKeys(lt / BEAT, oxK), omov = lt / BEAT < 3.6 && lt > 0.1;
+  sign(420, GY2 - 250, 300, '6月', '保密递交 · 据报道', prog(lt, b(1.2) - 0.5, b(1.2) - 0.1), SILV);
+  const wk = easeOut(prog(lt, b(3.0), b(3.6))), wh = 330 * wk;
+  if (wk > 0) { ctx.fillStyle = '#3a3d48'; ctx.strokeStyle = SILV; ctx.lineWidth = 5; ctx.fillRect(810, GY2 - wh, 110, wh); ctx.strokeRect(810, GY2 - wh, 110, wh); ctx.strokeStyle = 'rgba(191,203,224,0.5)'; ctx.lineWidth = 3; for (let y = GY2 - 40; y > GY2 - wh; y -= 40) { ctx.beginPath(); ctx.moveTo(810, y); ctx.lineTo(920, y); ctx.stroke(); } text('未公开', 865, GY2 - wh - 26, { size: 40, weight: 700, color: SILV, alpha: clamp(wk * 2) }); }
+  const bump = lt - b(3.55), bumped = bump > 0;
+  const rock = bumped ? -50 * Math.exp(-5 * bump) : 0;
+  orb(ox + rock, GY2 - (omov ? Math.abs(Math.sin(lt * 9)) * 26 : 0), 0.62, { t: lt, mood: bumped ? -1 : 1, squash: bumped ? Math.exp(-8 * bump) * 2 : 0, feet: true });
+  if (bumped && lt < b(5.2)) stars(ox + rock, GY2 - 150, lt, 1);
+  dustPuff(800, GY2, bump);
+  const hp = prog(lt, b(5.2), b(9.5));
+  if (lt > b(5.2)) { hourglass(ox - 20, GY2 - 230, 0.7, hp, easeOut(prog(lt, b(5.2), b(5.6)))); }
+  const kc = easeBack(prog(lt, b(6.6), b(6.6) + 0.5));
+  if (kc > 0) { ctx.save(); ctx.translate(1230, GY2 - 90); const cs = clamp(kc, 0, 1.06); ctx.scale(cs, cs); ctx.globalAlpha *= clamp(kc * 2); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 30; roundRect(-170, -100, 340, 190, 14); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = SILV; ctx.fillRect(-170, -100, 340, 40);
+    text('据报道 · 最早', 0, -70, { size: 26, weight: 700, color: '#1f2635' }); text('2027？', 0, 46, { size: 96, family: F.serif, weight: 900, color: '#2a2118' }); ctx.restore(); }
+}
+
+// ---------- B: the pie — same pie, counted differently ----------
+function pie(x, y, r, frac, rot = 0, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(rot);
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 24; ctx.fillStyle = '#C98A3A'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r, 0, 6.283 * frac); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = '#F0C060'; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r * 0.9, 0, 6.283 * frac); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#C8553D'; [[0.5, 0.2], [0.65, 0.9], [0.3, 1.6], [0.7, 2.5], [0.45, 3.3], [0.6, 4.1], [0.35, 4.9], [0.7, 5.7]].forEach(([d, an]) => { if (an / 6.283 < frac) { ctx.beginPath(); ctx.arc(Math.cos(an) * r * d, Math.sin(an) * r * d, r * 0.09, 0, 6.283); ctx.fill(); } });
+  ctx.strokeStyle = 'rgba(120,70,20,0.45)'; ctx.lineWidth = 3; for (let i = 0; i < 8; i++) { const an = i / 8 * 6.283; if (an <= 6.283 * frac + 0.01) { ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(an) * r * 0.9, Math.sin(an) * r * 0.9); ctx.stroke(); } }
+  ctx.restore();
+}
+function flyTo(p, x0, y0, x1, y1, h) { const e = easeIO(clamp(p)); return [lerp(x0, x1, e), lerp(y0, y1, e) - h * Math.sin(Math.PI * clamp(p))]; }
+function sceneRev(lt, t) {
+  const CX = 960, CY = 250, GY = 850, BX = 360, OXX = 1560;
+  const k0 = easeOut(prog(lt, -0.2, 0.5));
+  const chew = prog(lt, b(4.4), b(5.6)) > 0 && prog(lt, b(4.4), b(5.6)) < 1 ? 1 : 0;
+  cloud(CX, CY, 1.3, { t: lt, a: k0, chew, mood: 1 });
+  text('云平台', CX, CY + 130, { size: 32, weight: 700, color: SILV, alpha: k0 });
+  bellG(BX, GY, 1.2, { t: lt, mood: 1, a: k0, swing: 0.04 * Math.sin(lt * 3) });
+  orb(OXX, GY, 1.2, { t: lt, mood: lt > b(5.6) ? -1 : 1, a: k0 });
+  text('Anthropic', BX, 892, { size: 28, weight: 700, color: C.goldHi, alpha: k0 }); text('OpenAI', OXX, 892, { size: 28, weight: 700, color: SILV, alpha: k0 });
+  // pie 1: the whole pie goes to the bell
+  const p1 = prog(lt, b(1.0), b(2.6)), pop1 = easeBack(prog(lt, -0.1, 0.4));
+  if (lt < b(1.0)) { const s = clamp(pop1, 0, 1.1); pie(CX, 560, 170 * s, 1, lt * 0.5, clamp(pop1 * 2)); }
+  else if (lt < b(2.6)) { const [x, y] = flyTo(p1, CX, 560, BX, 430, 200); pie(x, y, lerp(170, 120, p1), 1, lt * 3); }
+  else if (lt < b(7.8)) { pie(BX, 400 + 6 * Math.sin(lt * 4), 120, 1, 0); }
+  if (lt >= b(2.6)) { stamp2(BX, 250, -0.06, 380, '算全部', 56, prog(lt, b(2.6), b(3.0)), 'rgba(232,207,148,1)'); burst(BX, 430, lt - b(2.6), 0.7); }
+  // pie 2: the cloud takes a bite, the orb gets the rest
+  const pop2 = easeBack(prog(lt, b(3.2), b(3.7)));
+  const bite = easeIO(prog(lt, b(4.2), b(5.0)));
+  if (lt >= b(3.2) && lt < b(5.6)) {
+    const s = clamp(pop2, 0, 1.1), frac = 1 - 0.4 * bite; pie(CX, 560, 170 * s, frac, 0.0, clamp(pop2 * 2));
+    if (bite > 0 && bite < 1) { const [wx, wy] = flyTo(bite, CX, 560, CX, CY + 40, 60); ctx.save(); ctx.translate(wx, wy); ctx.scale(1 - 0.6 * bite, 1 - 0.6 * bite); ctx.rotate(6.283 * (1 - 0.4) + 0.1); pie(0, 0, 170, 0.4, 0, 1); ctx.restore(); }
+  } else if (lt >= b(5.6) && lt < b(6.8)) { const p = prog(lt, b(5.6), b(6.8)); const [x, y] = flyTo(p, CX, 560, OXX, 430, 200); pie(x, y, lerp(170, 100, p), 0.6, lt * 2); }
+  else if (lt >= b(6.8)) { pie(OXX, 400 + 6 * Math.sin(lt * 4), 100, 0.6, 0); }
+  if (lt >= b(6.8)) { stamp2(OXX, 250, 0.06, 470, '只算一份', 56, prog(lt, b(6.8), b(7.2)), 'rgba(191,203,224,1)'); burst(OXX, 430, lt - b(6.8), 0.7); }
+  const kn = prog(lt, b(7.4), b(7.8));
+  if (kn > 0) { ctx.save(); ctx.translate(960 + shakeAt(lt, b(7.4)), 0); bigNum('≠', 0, 700, 240, 1, kn); text('口径不同', 0, 780, { size: 52, weight: 700, color: C.text, alpha: clamp(kn * 2) }); ctx.restore(); burst(960, 660, lt - b(7.4), 1.0); }
+}
+
+// ---------- C: balloons — valuation as hot air ----------
+function balloonB(x, y, r, col, a = 1, wob = 0) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x + wob, y);
+  const g = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r * 1.1); g.addColorStop(0, col[0]); g.addColorStop(1, col[1]);
+  ctx.shadowColor = 'rgba(232,207,148,0.3)'; ctx.shadowBlur = 40; ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 1.12, 0, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.beginPath(); ctx.moveTo(-10, r * 1.1); ctx.lineTo(10, r * 1.1); ctx.lineTo(0, r * 1.1 + 16); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(-r * 0.4, -r * 0.45, r * 0.14, r * 0.3, -0.5, 0, 6.283); ctx.fill(); ctx.restore();
+}
+function sceneVal(lt, t) {
+  const GY = 840, BXX = 560, OXX = 1420, BCY = 440, OCY = 520;
+  const k0 = easeOut(prog(lt, -0.2, 0.5));
+  const rb = lt < b(1.0) ? 90 : lerp(90, 150, easeOut(prog(lt, b(1.0), b(2.6))));                     // gold balloon: May
+  const rg = lt < b(3.4) ? rb : lerp(150, 235, easeIO(prog(lt, b(3.4), b(5.4))));                        // ... then the IPO range
+  const wob = 5 * Math.sin(lt * 3);
+  bellG(BXX, GY, 0.85, { t: lt, mood: 1, a: k0, swing: 0.04 * Math.sin(lt * 3) });
+  orb(OXX, GY, 0.85, { t: lt, mood: lt > b(5.6) ? -1 : 1, a: k0 });
+  // orb's balloon (3月)
+  const ro = 130 * easeBack(prog(lt, -0.1, 0.5));
+  const oy = OCY + 6 * Math.sin(lt * 2.4);
+  ctx.strokeStyle = 'rgba(191,203,224,0.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(OXX, GY - 238 * 0.85 * 0.5 - 60); ctx.quadraticCurveTo(OXX + 20, (GY - 190 + oy + ro) / 2, OXX + wob, oy + ro * 1.2); ctx.stroke();
+  balloonB(OXX, oy, Math.max(ro, 1), ['#F4F8FF', '#7D8DAB'], k0, wob); text('8520亿', OXX, oy + 12, { size: 44, family: F.serif, weight: 900, color: '#1f2635', alpha: clamp(ro / 130) });
+  text('3月', OXX, oy - 40, { size: 28, weight: 700, color: '#1f2635', alpha: clamp(ro / 130) });
+  // gold balloon
+  const gy = BCY - (rg - 90) * 0.25 + 5 * Math.sin(lt * 2.7);
+  ctx.strokeStyle = 'rgba(232,207,148,0.9)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(BXX, GY - 238 * 0.85 * 0.5 - 60); ctx.quadraticCurveTo(BXX - 20, (GY - 190 + gy + rg) / 2, BXX - wob, gy + rg * 1.2); ctx.stroke();
+  // pump puffs while inflating
+  const inf = (lt > b(1.0) && lt < b(2.6)) || (lt > b(3.4) && lt < b(5.4));
+  if (inf) for (let i = 0; i < 3; i++) { const p = ((lt * 3 + i / 3) % 1); ctx.fillStyle = `rgba(255,240,200,${0.6 * (1 - p)})`; ctx.beginPath(); ctx.arc(BXX + 40 + p * 70, GY - 200 - p * 90, 12 * (1 - p) + 4, 0, 6.283); ctx.fill(); }
+  balloonB(BXX, gy, rg, ['#FFF0C8', '#B8935A'], k0, -wob);
+  const big = rg > 200;
+  text(big ? '≈1.3万亿' : '9650亿', BXX, gy + 14, { size: big ? 66 : 48, family: F.serif, weight: 900, color: '#2a2118', alpha: k0 });
+  text(big ? '上市 · 据报道' : '5月', BXX, gy - 44, { size: 28, weight: 700, color: '#2a2118', alpha: k0 });
+  // the old "2万亿" rumour ring: the balloon stops short of it
+  const kr = easeOut(prog(lt, b(5.2), b(5.9)));
+  if (kr > 0) { ctx.save(); ctx.globalAlpha *= kr; ctx.setLineDash([18, 14]); ctx.strokeStyle = 'rgba(224,85,74,0.85)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.ellipse(BXX, BCY - 40, 300, 330, 0, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); text('此前传闻 2万亿', BXX, 150, { size: 38, weight: 700, color: '#E0554A', alpha: kr }); }
+  if (rg > 232 && lt < b(6.2)) for (let i = 0; i < 2; i++) { const p = ((lt * 2 + i / 2) % 1); ctx.strokeStyle = `rgba(255,240,200,${0.7 * (1 - p)})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(BXX + 230 + p * 30, gy - 40 + i * 40); ctx.lineTo(BXX + 270 + p * 50, gy - 40 + i * 40); ctx.stroke(); }
+}
+
+// ---------- D / F: the money loop — coins from the AI lab to its suppliers, and back ----------
+function sceneFlow(lt, t, back) {
+  const GY = 800, BXX = 330, SX = 640;
+  const SUP = [[1010, 300, '亚马逊'], [1350, 300, '谷歌'], [1690, 300, '微软']], CHIP = [1350, 760, '英伟达'];
+  const ks = easeOut(prog(lt, -0.2, 0.5));
+  const bump = back ? 0.06 * easeIn2(prog(lt, b(1.2), b(5.5))) : 0;
+  bellG(BXX, GY, 0.95 * (1 + bump), { t: lt, mood: 1, a: ks, swing: 0.03 * Math.sin(lt * 4) + (back ? 0.05 * easeIn2(prog(lt, b(4), b(6))) * Math.sin(lt * 28) : 0), glow: back ? 0.2 + 0.7 * easeIn2(prog(lt, b(3.5), b(6))) : 0.2 });
+  const sa = i => easeBack(prog(lt, b(0.2 + i * 0.3), b(0.2 + i * 0.3) + 0.4));
+  SUP.forEach(([x, y, nm], i) => cloud(x, y, 0.85, { t: lt + i, a: clamp(sa(i)), label: nm, chew: !back && lt > b(1.2 + i * 0.4) && lt < b(5.5) ? 0.6 : 0 }));
+  chipChar(CHIP[0], CHIP[1], 0.8, { t: lt, a: clamp(sa(3)), label: CHIP[2], hop: !back && lt > b(1.6) ? Math.abs(Math.sin(lt * 7)) * 14 : 0 });
+  // the sack on the bell's side / the little pouch
+  const sk = easeBack(prog(lt, b(0.4), b(0.9)));
+  if (!back) {
+    ctx.save(); ctx.translate(SX + 40, GY); ctx.scale(clamp(sk, 0, 1.05), clamp(sk, 0, 1.05)); ctx.globalAlpha *= clamp(sk * 2);
+    ctx.fillStyle = '#B8935A'; ctx.beginPath(); ctx.moveTo(-90, 0); ctx.bezierCurveTo(-130, -120, -60, -190, -30, -200); ctx.lineTo(30, -200); ctx.bezierCurveTo(60, -190, 130, -120, 90, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#6b4f20'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(-34, -196); ctx.lineTo(34, -196); ctx.stroke();
+    text('$', 0, -70, { size: 120, family: F.serif, weight: 900, color: '#2a2118' }); ctx.restore();
+    const kn = prog(lt, b(1.6), b(2.0)); if (kn > 0) { bigNum('≈ 9000 亿', 520, 300, 104, 1, kn); text('美元 · 算力合同（多年）', 520, 360, { size: 38, weight: 700, color: C.text, alpha: clamp(kn * 2) }); }
+  } else {
+    const kn = prog(lt, b(1.4), b(1.8)); if (kn > 0) { bigNum('≈ 260 亿', 520, 300, 104, 1, kn); text('美元 · 同步入股', 520, 360, { size: 38, weight: 700, color: C.text, alpha: clamp(kn * 2) }); }
+  }
+  // flying coins (arcs): out = sack -> suppliers; back = suppliers -> bell's head
+  const tg = [...SUP.map(([x, y]) => [x, y + 20]), [CHIP[0], CHIP[1] - 120]];
+  const src = back ? null : [SX + 40, GY - 230], dst = [BXX, GY - 238 * 0.95 - 20];
+  tg.forEach(([x, y], i) => {
+    const n = 5; for (let j = 0; j < n; j++) {
+      const sp = back ? 0.7 : 0.5, p = (((lt - b(1.0)) * sp + j / n + i * 0.17) % 1 + 1) % 1; if (lt < b(1.0)) continue;
+      const [x0, y0, x1, y1] = back ? [x, y, dst[0], dst[1]] : [src[0], src[1], x, y];
+      const [cx, cy] = flyTo(p, x0, y0, x1, y1, 140 + 20 * i); coin(cx, cy, back ? 16 : 22, Math.min(1, Math.min(p, 1 - p) * 8));
+    }
+  });
+  if (back) { const rk = easeOut(prog(lt, b(3.0), b(4.2))); if (rk > 0) { ctx.save(); ctx.globalAlpha *= rk * 0.8; ctx.strokeStyle = C.goldHi; ctx.lineWidth = 10; ctx.setLineDash([26, 18]); ctx.lineDashOffset = -lt * 160; ctx.beginPath(); ctx.ellipse(1010, 540, 760, 330, 0, 0.1 * Math.PI, 1.9 * Math.PI * rk + 0.1 * Math.PI); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); }
+    const dark = 0.45 * easeIn2(prog(lt, b(4.6), b(6))); if (dark > 0) { ctx.fillStyle = `rgba(0,0,0,${dark})`; ctx.fillRect(0, 0, W, 1080); } }
+}
+
+// ---------- E: the bell strikes on the drum drop (beat 44); the orb is still waiting ----------
+function sceneStrike(lt, t) {
+  const a = Math.max(0, lt), BXX = 640;
+  ctx.save(); ctx.translate(shakeAt(lt, 0) * 1.6, shakeAt(lt, 0.05) * 1.2);
+  ctx.strokeStyle = 'rgba(201,169,106,0.9)'; ctx.lineWidth = 16; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(BXX - 340, 130); ctx.lineTo(BXX + 340, 130); ctx.stroke();
+  const sw = 0.30 * Math.exp(-1.3 * a) * Math.sin(7 * a);
+  for (let i = 0; i < 4; i++) { const r = (a - 0.12 * i) * 1000; if (r > 0 && r < 1100) { ctx.strokeStyle = `rgba(232,207,148,${0.7 * (1 - r / 1100)})`; ctx.lineWidth = 8 * (1 - r / 1100) + 1; ctx.beginPath(); ctx.arc(BXX, 430, r, 0, 6.283); ctx.stroke(); } }
+  bell(BXX, 140, 2.2, { t: lt, swing: sw, clap: -Math.sin(7 * a) * Math.exp(-1.3 * a), mood: 1, glow: 0.35 + 0.65 * pulseAt(lt, 0.05, 0.4) });
+  burst(BXX, 520, a, 1.4); burst(BXX, 520, a - 0.12, 1.0);
+  tagCard(BXX, 790, '据报道：11月18日定价 · 19日挂牌', easeOut(prog(lt, b(0.6), b(0.6) + 0.4)), 30, 640);
+  ctx.restore();
+  // the waiting side
+  const ko = easeOut(prog(lt, b(1.0), b(1.0) + 0.5));
+  ctx.save(); ctx.globalAlpha *= 1;
+  orb(1500, 700, 1.2, { t: lt, mood: -1, a: ko * 0.85 }); hourglass(1500, 430, 0.9, prog(lt, b(1.0), b(7.0)), ko);
+  const kc = easeBack(prog(lt, b(2.4), b(2.4) + 0.5));
+  if (kc > 0) { ctx.save(); ctx.translate(1500, 290); const cs = clamp(kc, 0, 1.06); ctx.scale(cs, cs); ctx.globalAlpha *= clamp(kc * 2); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 30; roundRect(-200, -100, 400, 200, 14); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = SILV; ctx.fillRect(-200, -100, 400, 46);
+    text('OpenAI · 最早', 0, -66, { size: 30, weight: 700, color: '#1f2635' }); text('2027？', 0, 64, { size: 100, family: F.serif, weight: 900, color: '#2a2118' }); ctx.restore(); }
+  ctx.restore();
+  const fl = Math.exp(-lt / 0.1) * 0.7; if (lt >= 0 && fl > 0.01) { ctx.fillStyle = `rgba(255,240,210,${fl})`; ctx.fillRect(0, 0, W, 1080); }
+}
+
+// ---------- G: the bell keeps jumping up — but each jump is lower than the last ----------
+function sceneSlow(lt, t) {
+  const PX = [330, 960, 1590], PT = [760, 680, 600], PW = 300, GYof = i => PT[i];
+  const k0 = easeOut(prog(lt, -0.2, 0.5));
+  ctx.save(); ctx.translate(shakeAt(lt, b(2.2)) * 0.8 + shakeAt(lt, b(4.3)) * 1.2, 0);
+  PX.forEach((x, i) => { const k = easeOut(prog(lt, -0.2 + i * 0.15, 0.5 + i * 0.15)); const top = lerp(PT[i] + 200, PT[i], k);
+    ctx.save(); ctx.globalAlpha *= k; ctx.shadowColor = 'rgba(232,207,148,0.3)'; ctx.shadowBlur = 24; const g = ctx.createLinearGradient(0, top, 0, top + 60); g.addColorStop(0, '#F0D99E'); g.addColorStop(1, '#8a6a32'); roundRect(x - PW / 2, top, PW, 60, 10); ctx.fillStyle = g; ctx.fill(); ctx.restore();
+    text(['1 季度', '2 季度', '3 季度'][i], x, top + 42, { size: 32, weight: 700, color: '#2a2118', alpha: k }); });
+  // position of the bell
+  const J1 = [b(0.8), b(2.2)], J2 = [b(3.1), b(4.3)];
+  let x, y, sq = 0;
+  const ph = (a, c) => prog(lt, a, c);
+  if (lt < J1[0]) { x = PX[0]; y = PT[0]; sq = easeIn2(ph(J1[0] - 0.3, J1[0])); }
+  else if (lt < J1[1]) { const p = ph(...J1); x = lerp(PX[0], PX[1], p); y = lerp(PT[0], PT[1], p) - 520 * Math.sin(Math.PI * p); }
+  else if (lt < J2[0]) { x = PX[1]; y = PT[1]; sq = Math.exp(-6 * (lt - J1[1])) * 1.5 + easeIn2(ph(J2[0] - 0.3, J2[0])); }
+  else if (lt < J2[1]) { const p = ph(...J2); x = lerp(PX[1], PX[2], p); y = lerp(PT[1], PT[2], p) - 170 * Math.sin(Math.PI * p); }
+  else { x = PX[2]; y = PT[2]; sq = Math.exp(-6 * (lt - J2[1])) * 1.5; }
+  // dotted trails of the two jumps
+  ctx.save(); ctx.fillStyle = 'rgba(232,207,148,0.7)';
+  [[J1, 0, 1, 520], [J2, 1, 2, 170]].forEach(([J, a, c, h], n) => { const up = Math.min(1, prog(lt, J[0], J[1])); for (let i = 0; i <= 18; i++) { const p = i / 18; if (p > up) break; ctx.beginPath(); ctx.arc(lerp(PX[a], PX[c], p), lerp(PT[a], PT[c], p) - h * Math.sin(Math.PI * p) - 150, 7, 0, 6.283); ctx.fill(); } });
+  ctx.restore();
+  bellG(x, y, 0.8, { t: lt, mood: lt > J2[1] + 0.3 ? 0 : 1, a: k0, squash: sq, swing: lt > J1[0] && lt < J1[1] ? 0.15 * Math.sin((lt - J1[0]) * 8) : 0 });
+  if (lt > J2[1] + 0.3) { ctx.fillStyle = 'rgba(140,200,255,0.9)'; ctx.beginPath(); ctx.ellipse(PX[2] + 60, y - 150 + 4 * Math.sin(lt * 6), 6, 10, 0, 0, 6.283); ctx.fill(); }
+  dustPuff(PX[1], PT[1], lt - J1[1]); dustPuff(PX[2], PT[2], lt - J2[1]);
+  const k1 = prog(lt, b(1.5), b(1.9)); if (k1 > 0) bigNum('+144%', 640, 270, 120, 1, k1);
+  const k2 = prog(lt, J2[1], J2[1] + 0.35); if (k2 > 0) { bigNum('+47%', 1290, 380, 120, 1, k2); burst(1590, 560, lt - J2[1], 1.0); }
+  ctx.restore();
+  text('2026 · 每季度收入的环比增速', 960, 150, { size: 32, color: C.gray, alpha: easeOut(prog(lt, 0, 0.4)) });
+}
+
+// ---------- H: three things to watch ----------
+function sceneWatch(lt, t) {
+  const CARDS = [['增速', '还能涨这么快吗？'], ['算力账', '收入撑得住合同吗？'], ['OpenAI', '什么时候上市？']], X = [450, 960, 1470], at = [0.7, 1.7, 2.7];
+  let sh = 0; at.forEach(a => { sh += shakeAt(lt, b(a)) * 0.8; });
+  ctx.save(); ctx.translate(sh, 0);
+  CARDS.forEach((c, i) => {
+    const k = prog(lt, b(at[i]) - 0.3, b(at[i])); if (k <= 0) return;
+    const drop = (1 - easeIn2(k)) * 700, wob = k >= 1 ? 0.05 * Math.exp(-4 * (lt - b(at[i]))) * Math.sin(14 * (lt - b(at[i]))) : 0;
+    ctx.save(); ctx.translate(X[i], 450 - drop); ctx.rotate(-0.04 + 0.04 * i + wob);
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16; roundRect(-215, -190, 430, 380, 12); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    ctx.fillStyle = i === 2 ? SILV : C.goldHi; ctx.fillRect(-215, -190, 430, 18);
+    text(String(i + 1), -165, -100, { size: 70, family: F.serif, weight: 900, color: '#8a6a32' });
+    text(c[0], 0, 20, { size: c[0].length > 4 ? 78 : 96, family: F.serif, weight: 900, color: '#2a2118' }); text(c[1], 0, 110, { size: 34, weight: 700, color: '#6b5a40' });
+    ctx.restore();
+    if (k >= 1) burst(X[i], 630, lt - b(at[i]), 0.7);
+  });
+  ctx.restore();
+  const ka = easeOut(prog(lt, -0.2, 0.5));
+  bellG(190, 870, 0.5, { t: lt, mood: 1, a: ka, swing: 0.06 * Math.sin(lt * 5) });
+  orb(1730, 870, 0.5, { t: lt, mood: -1, a: ka });
+}
+
+// ---------- J: end ----------
+function sceneEnd(lt, t) {
+  const k = easeOut(prog(lt, -0.1, 0.5));
+  bell(660, 140, 0.9, { t: lt, swing: 0.1 * Math.sin(lt * 3.2) * Math.exp(-0.2 * lt), mood: 1, glow: 0.5, a: k });
+  orb(1260, 380, 0.9, { t: lt, mood: 0, a: k });
+  const g = ctx.createLinearGradient(-400, 0, 400, 0); g.addColorStop(0, '#B8935A'); g.addColorStop(0.5, '#FFF0C8'); g.addColorStop(1, '#B8935A');
+  ctx.save(); ctx.globalAlpha *= k; ctx.translate(960, 640); ctx.scale(lerp(1.08, 1, k), lerp(1.08, 1, k)); ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36; ctx.font = `900 110px ${F.serif}`; ctx.fillText('一个先敲钟，一个在等', 0, 0); ctx.restore();
+  text('价格与日期，以公司公告为准', 960, 740, { size: 44, color: C.gray, alpha: prog(lt, b(1.2), b(1.8)) });
+}
+
+// ---------- compose ----------
+function render(t, frame = Math.round(t * TL.fps)) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
+  background(t, frame); glue(t); dust(t, 0.45);
+  sceneTitleCard(t);
+  scene(t, 'A_race', lt => sceneRace(lt, t));
+  scene(t, 'B_rev', lt => sceneRev(lt, t));
+  scene(t, 'C_val', lt => sceneVal(lt, t));
+  scene(t, 'D_flow', lt => sceneFlow(lt, t, false));
+  scene(t, 'F_back', lt => sceneFlow(lt, t, true), { zout: 1 });
+  scene(t, 'E_bell', lt => sceneStrike(lt, t), { zin: 1, zout: 1.0 });
+  scene(t, 'G_slow', lt => sceneSlow(lt, t));
+  scene(t, 'H_watch', lt => sceneWatch(lt, t));
+  scene(t, 'J_end', lt => sceneEnd(lt, t), { zin: 1, zout: 1, fi: 0.6, fo: 0.01 });
+  const L = (k, s2) => label(t, S[k][0] + 0.15, S[k][1] - 0.1, s2);
+  L('A_race', '上 市 进 度'); L('B_rev', '收 入'); L('C_val', '估 值'); L('D_flow', '对 科 技 行 业 ①'); L('F_back', '对 科 技 行 业 ②'); L('E_bell', '一 先 一 后');
+  L('G_slow', '增 速'); L('H_watch', '三 个 看 点'); L('J_end', '展 望');
+  const s = (n0, n1, zh, en) => sub(t, T(n0) + 0.05, T(n1), zh, en);
+  s(4, 7.6, 'Anthropic：6 月保密递交，10 月公开文件', 'Anthropic: confidential filing in June, public in October.');
+  s(7.6, 10.6, '11 月 10 日，Anthropic 启动路演', 'Nov 10: Anthropic starts its roadshow.');
+  s(10.6, 14, 'OpenAI 同样 6 月递交（据报道），文件未公开', 'OpenAI also filed in June (reported), but nothing is public.');
+  s(14, 17.5, '按年化算，Anthropic 约 680 亿美元（第三季度×4）', 'Annualized, Anthropic is about $68B (Q3 × 4).');
+  s(17.5, 20.2, 'OpenAI 据报道约 500 亿美元（9 月底）', 'OpenAI: about $50B at end-September (reported).');
+  s(20.2, 23, '但两家算法不同，不能直接比', 'But they count differently — not directly comparable.');
+  s(23, 26.5, 'OpenAI 上次估值 8520 亿；Anthropic 5 月 9650 亿', 'OpenAI’s last mark: $852B. Anthropic in May: $965B.');
+  s(26.5, 30, '据报道，上市区间约合 1.3 万亿，低于此前传的 2 万亿', 'Reportedly ~$1.3T at the IPO range, below the earlier $2T talk.');
+  s(30, 34, 'Anthropic 的算力合同约 9000 亿美元，多年付清', 'Anthropic’s compute commitments: about $900B over many years.');
+  s(34, 38, '钱流向云平台和芯片公司：亚马逊、谷歌、微软、英伟达…', 'The money flows to clouds and chipmakers.');
+  s(38, 41, '同时，这些供应商也在出钱入股', 'And those suppliers are putting money back in.');
+  s(41, 44, 'IPO 同步私募：谷歌、微软、英伟达等合计 260 亿美元', 'A $26B private placement alongside the IPO.');
+  s(44, 47.6, 'Anthropic：据报道 11 月 18 日定价，19 日挂牌', 'Anthropic: reportedly pricing Nov 18, trading Nov 19.');
+  s(47.6, 51, 'OpenAI：还在等，据报道最早 2027 年', 'OpenAI: still waiting — reportedly 2027 at the earliest.');
+  s(51, 54.5, '但 Anthropic 的增速在放缓：第二季度环比 +144%', 'But growth is slowing: Q2 was +144% quarter on quarter.');
+  s(54.5, 57, '第三季度只有 +47%（仍然很高）', 'Q3: only +47% (still very high).');
+  s(57, 60, '看点：增速、算力账，还有 OpenAI 什么时候跟进', 'Watch: growth, the compute bill, and OpenAI’s timing.');
+  s(60, 62, '市场的定价，可能成为整个行业的参照', 'The market’s price may become the industry’s yardstick.');
+  s(62, 66, '钟声之后，才是真正的比较', 'After the bell, the real comparison begins.');
+  finish(t, frame);
+}
+
+window.ALL_TEXT = document.documentElement.innerHTML;
+window.ready = (async () => {
+  const sample = window.ALL_TEXT;
+  await Promise.all([
+    document.fonts.load(`900 92px ${F.serif}`, sample),
+    document.fonts.load(`400 40px ${F.sans}`, sample),
+    document.fonts.load(`700 40px ${F.sans}`, sample),
+    document.fonts.load(`italic 400 30px ${F.en}`, sample),
+  ]);
+  await document.fonts.ready;
+  return { duration: DURATION, frames: Math.ceil(DURATION * TL.fps) };
+})();
+window.render = render;
+</script>
+</body>
+</html>
