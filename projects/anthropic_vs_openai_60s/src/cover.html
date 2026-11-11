@@ -54,26 +54,40 @@ function spark(x, y, r) {                                       // a small gold 
   ctx.save(); ctx.shadowColor = 'rgba(255,220,120,0.9)'; ctx.shadowBlur = 30; ctx.fillStyle = '#FFE08A'; ctx.beginPath();
   for (let i = 0; i < 8; i++) { const rad = i % 2 ? r * 0.28 : r, an = i / 8 * 6.283 - Math.PI / 2; ctx.lineTo(x + Math.cos(an) * rad, y + Math.sin(an) * rad); } ctx.closePath(); ctx.fill(); ctx.restore();
 }
+function silverCovered(x, y, sc) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  ctx.strokeStyle = '#46536c'; ctx.lineWidth = 10; ctx.beginPath(); ctx.arc(0, -34, 16, 0, 6.283); ctx.stroke();
+  const g0 = ctx.createLinearGradient(-130, 0, 130, 0); g0.addColorStop(0, '#56627a'); g0.addColorStop(0.3, '#F4F8FF'); g0.addColorStop(0.6, '#A9B8D2'); g0.addColorStop(1, '#46536c'); ctx.fillStyle = g0;
+  ctx.beginPath(); ctx.moveTo(-36, 10); ctx.bezierCurveTo(-36, -22, 36, -22, 36, 10); ctx.bezierCurveTo(40, 100, 70, 140, 126, 176); ctx.lineTo(126, 200); ctx.lineTo(-126, 200); ctx.lineTo(-126, 176); ctx.bezierCurveTo(-70, 140, -40, 100, -36, 10); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(-136, 194, 272, 28, 14); ctx.fill(); ctx.fillStyle = '#DCE5F5'; ctx.beginPath(); ctx.arc(0, 240, 21, 0, 6.283); ctx.fill();
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 30; ctx.beginPath(); ctx.moveTo(-160, 188); ctx.bezierCurveTo(-124, 60, -72, -64, 0, -64); ctx.bezierCurveTo(72, -64, 124, 60, 160, 188);
+  for (let i = 0; i < 6; i++) { const x0 = 160 - i * 53.3, x1 = x0 - 53.3; ctx.quadraticCurveTo((x0 + x1) / 2, 188 + (i % 2 ? -22 : 26), x1, 188); } ctx.closePath();
+  const g = ctx.createLinearGradient(-160, 0, 160, 0); g.addColorStop(0, '#59606f'); g.addColorStop(0.35, '#b4bbca'); g.addColorStop(0.65, '#858c9c'); g.addColorStop(1, '#474d5b'); ctx.fillStyle = g; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(40,44,54,0.45)'; ctx.lineWidth = 4; [[-30, -110, 150], [24, 70, 170], [60, 128, 160]].forEach(([x0, x1, y1]) => { ctx.beginPath(); ctx.moveTo(x0, -30); ctx.quadraticCurveTo((x0 + x1) / 2 + 10, 60, x1, y1); ctx.stroke(); });
+  ctx.restore();
+}
+function beamC(x0, x1, y) { const g = ctx.createLinearGradient(0, y - 14, 0, y + 14); g.addColorStop(0, '#E8CF94'); g.addColorStop(1, '#7a5b28'); ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x0, y - 13, x1 - x0, 26, 13); ctx.fill(); }
+function ropeC(x, y0, y1, c) { ctx.strokeStyle = c; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke(); }
 function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   if (!WIDE) {
     glow(540, 1050, 640, GOLDC, 0.32);
     outlined('Anthropic vs OpenAI', 540, 215, 100, '#ffffff', '#000', 14, 'rgba(255,255,255,0.35)');
-    outlined('AI双雄上市战', 540, 450, 158, '#fff200', '#000', 18, 'rgba(255,230,0,0.45)');
-    pill(540, 540, 760, 104, 62, '科技圈怎么变？');
-    bell(350, 780, 1.9); orbC(790, 1290, 1.6);
+    outlined('两口钟', 540, 450, 220, '#fff200', '#000', 18, 'rgba(255,230,0,0.45)');
+    pill(540, 540, 880, 104, 56, '一口先响，一口蒙着布');
+    beamC(40, 1040, 720); ropeC(270, 720, 790, '#C9A96A'); ropeC(810, 720, 790, '#A9B8D2'); bell(270, 830, 1.5); silverCovered(810, 830, 1.5);
     ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', 540, 1412); ctx.restore();
   } else {
     glow(1000, 700, 560, GOLDC, 0.32);
-    outlined('Anthropic vs OpenAI', 470, 200, 84, '#ffffff', '#000', 13, 'rgba(255,255,255,0.35)', 'center');
-    outlined('AI双雄上市战', 470, 410, 128, '#fff200', '#000', 17, 'rgba(255,230,0,0.45)', 'center');
-    pill(470, 480, 640, 96, 54, '科技圈怎么变？');
-    bell(1010, 300, 1.5); orbC(1250, 960, 1.3);
+    outlined('Anthropic vs OpenAI', 400, 200, 72, '#ffffff', '#000', 13, 'rgba(255,255,255,0.35)', 'center');
+    outlined('两口钟', 400, 410, 190, '#fff200', '#000', 17, 'rgba(255,230,0,0.45)', 'center');
+    pill(400, 480, 680, 96, 48, '一口先响，一口蒙着布');
+    beamC(780, 1420, 330); ropeC(960, 330, 400, '#C9A96A'); ropeC(1260, 330, 400, '#A9B8D2'); bell(960, 450, 1.05); silverCovered(1260, 450, 1.05);
     ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', W / 2, 1050); ctx.restore();
   }
 }
 window.ready = (async () => {
-  const sample = 'Anthropic vs OpenAIAI双雄上市战科技圈怎么变？@比特双子';
+  const sample = 'Anthropic vs OpenAI两口钟一口先响，一口蒙着布@比特双子';
   await Promise.all([document.fonts.load(`900 100px ${SANS}`, sample), document.fonts.load(`700 26px ${SANS}`, sample)]);
   await document.fonts.ready; draw(); return true;
 })();

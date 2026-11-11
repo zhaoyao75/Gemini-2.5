@@ -19,11 +19,11 @@ SC, TOTAL = TL["scenes_beats"], TL["total_beats"]
 SR, VBEAT = 44100, 60 / float(os.environ.get("VIDEO_BPM", TL["bpm"]))
 INTRO, TB = TL["intro_seconds"], SC["D_title"][1]
 def T(n): return n / TB * INTRO if n < TB else INTRO + (n - TB) * VBEAT
-A0 = SC["A_race"][0]
-DROP = SC["E_bell"][0]                      # video beat 44 (the bell strike)
+A0 = SC["A_cover"][0]
+DROP = SC["E_ring"][0]                      # video beat 44 (the bell strike)
 BREAK0 = DROP - 2
 BUILD0 = DROP - 6
-OUT0 = SC["J_end"][0]
+OUT0 = 62
 CUT = 55.0                                 # the climax ends here (video beat 55); pull-back, second rise at 58, outro at 62
 STEP = 1 / 8                               # one 16th note in video beats
 DUR = T(TOTAL) + TL["tail_seconds"]
