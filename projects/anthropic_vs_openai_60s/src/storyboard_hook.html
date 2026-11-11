@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Anthropic vs OpenAI</title>
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-serif-sc/900.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/noto-sans-sc/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/eb-garamond/400-italic.css">
+<style>
+  html, body { margin: 0; background: #000; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// Every frame is a pure function of time t (seconds). No requestAnimationFrame,
+// no Date, no unseeded randomness — so frame-by-frame rendering is repeatable.
+const TL = window.TL;                 // injected by render.js from timeline.json
+const BEAT = 60 / TL.bpm;
+const b = n => n * BEAT;              // beat index -> seconds
+// The title card lasts INTRO seconds; beat n >= TB is placed INTRO + (n - TB) beats into the video.
+const INTRO = TL.intro_seconds, TB = TL.scenes_beats.D_title[1];
+const T = n => n < TB ? n / TB * INTRO : INTRO + (n - TB) * BEAT;
+const S = Object.fromEntries(Object.entries(TL.scenes_beats).map(([k, [s, e]]) => [k, [T(s), T(e)]]));
+const DURATION = T(TL.total_beats) + TL.tail_seconds;
+
+const W = 1920, H = 1080;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---------- palette & fonts ----------
+const C = {
+  bgIn: '#0e0e0e', bgOut: '#000000',
+  text: '#EAEAF2', gray: '#8E8E93', gold: '#C9A96A', goldHi: '#E8CF94',
+  paper: '#EDE4D3', red: '#B53A2F',
+};
+const F = {
+  serif: '"Noto Serif SC"',
+  sans: '"Noto Sans SC"',
+  en: '"EB Garamond"',
+};
+
+// ---------- math helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const prog = (t, t0, t1) => clamp((t - t0) / (t1 - t0));
+const easeIO = k => k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const easeBack = k => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+// fade in over fi, hold, fade out over fo, inside [t0, t1]
+const window01 = (t, t0, t1, fi = 0.4, fo = 0.35) => Math.min(prog(t, t0, t0 + fi), 1 - prog(t, t1 - fo, t1));
+
+// ---------- static random fields (seeded) ----------
+const STARS = (() => { const r = mulberry32(7); return Array.from({ length: 220 }, () => ({ x: r() * W, y: r() * H, s: 0.4 + r() * 1.3, ph: r() * 6.28, sp: 0.4 + r() * 1.2 })); })();
+const DUST = (() => { const r = mulberry32(11); return Array.from({ length: 46 }, () => ({ x: r() * W, y: r() * H, s: 0.8 + r() * 2.2, vx: (r() - .5) * 14, vy: -6 - r() * 16, ph: r() * 6.28 })); })();
+
+// ---------- text helpers ----------
+function text(str, x, y, { size = 40, family = F.sans, weight = 400, color = C.text, align = 'center', alpha = 1, italic = false, spacing = 0, baseline = 'alphabetic' } = {}) {
+  if (alpha <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${family}`;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  ctx.letterSpacing = spacing + 'px';
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// Bilingual subtitle band at 85–91% height
+function subtitle(t, t0, t1, zh, en) {
+  const a = window01(t, t0, t1);
+  if (a <= 0) return;
+  const rise = (1 - easeOut(prog(t, t0, t0 + 0.4))) * 8;
+  text(zh, W / 2, 948 + rise, { size: 46, weight: 700, alpha: a, spacing: 2 });
+  text(en, W / 2, 996 + rise, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+}
+
+// Small note band at ~70% height
+function note(t, t0, t1, str, x = W / 2, y = 790) {
+  const a = window01(t, t0, t1, 0.35, 0.3);
+  text(str, x, y, { size: 24, color: C.gray, alpha: a, spacing: 1 });
+}
+
+function topLabel(t, t0, t1, str) {
+  const a = window01(t, t0, t1, 0.5, 0.4);
+  if (a <= 0) return;
+  text(str, W / 2, 74, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+  ctx.save(); ctx.globalAlpha = a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92); ctx.lineTo(W / 2 + 40, 92); ctx.stroke(); ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function heart(x, y, s, color) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s); ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(0, 3);
+  ctx.bezierCurveTo(-7, -3, -4, -9, 0, -5); ctx.bezierCurveTo(4, -9, 7, -3, 0, 3);
+  ctx.fill(); ctx.restore();
+}
+
+function glowDot(x, y, r, color, glow, alpha = 1) {
+  ctx.save(); ctx.globalAlpha *= alpha;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * glow);
+  g.addColorStop(0, color); g.addColorStop(0.25, color.replace(/[\d.]+\)$/, '0.35)')); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * glow, 0, 6.283); ctx.fill();
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+// ---------- background ----------
+function background(t, frame) {
+  const g = ctx.createRadialGradient(W / 2, H * 0.45, 80, W / 2, H * 0.5, W * 0.7);
+  g.addColorStop(0, C.bgIn); g.addColorStop(1, C.bgOut);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of STARS) {
+    const a = 0.15 + 0.35 * (0.5 + 0.5 * Math.sin(t * s.sp + s.ph));
+    ctx.fillStyle = `rgba(220,220,240,${a})`;
+    ctx.fillRect(s.x, s.y, s.s, s.s);
+  }
+}
+function dust(t, alpha = 1) {
+  for (const d of DUST) {
+    const x = ((d.x + d.vx * t) % W + W) % W;
+    const y = ((d.y + d.vy * t) % H + H) % H;
+    const a = alpha * (0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.3 + d.ph)));
+    ctx.fillStyle = `rgba(232,207,148,${a})`;
+    ctx.beginPath(); ctx.arc(x, y, d.s, 0, 6.283); ctx.fill();
+  }
+}
+function finish(t, frame) {
+  // vignette
+  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  // film grain, reseeded every frame
+  const r = mulberry32(1000 + frame);
+  for (let i = 0; i < 1800; i++) {
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.fillRect(r() * W, r() * H, 2, 2);
+  }
+  // watermark
+  text(TL.watermark, 60, 74, { size: 24, align: 'left', color: C.text, alpha: 0.35 });
+  // end fade (sample only)
+  const k = prog(t, DURATION - 0.6, DURATION);
+  if (k > 0) { ctx.fillStyle = `rgba(0,0,0,${k})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// =====================================================================
+//  《熬一个通宵 ≈ 醉驾？》
+//  Transitions: neighbouring scenes overlap and "push" through each other (old one shrinks and
+//  fades while the new one settles from slightly larger), so there is never a dark gap.
+// =====================================================================
+const AMBER = '#E8A33A', RED = '#E0554A';
+const DRIFT = t => [6 * Math.sin(t * 0.31), 4 * Math.sin(t * 0.23 + 1)];
+function scene(t, key, fn, o = {}) {
+  const [s0, s1] = S[key];
+  const fi = o.fi ?? 0.45, fo = o.fo ?? 0.4;
+  // staggered hand-over: the old scene is almost gone by the boundary, the new one pushes in right after it
+  const kin = s0 <= 0 ? 1 : easeOut(prog(t, s0 - 0.1, s0 - 0.1 + fi));
+  const kout = easeIO(prog(t, s1 - fo + 0.1, s1 + 0.1));
+  if (kin <= 0 || kout >= 1) return;
+  const sc = lerp(o.zin ?? 1.07, 1, kin) * lerp(1, o.zout ?? 0.93, kout) * (1 + (o.push ?? 0.035) * prog(t, s0, s1));   // slow push-in inside every scene
+  const [dx, dy] = o.nodrift ? [0, 0] : DRIFT(t);
+  ctx.save(); ctx.globalAlpha *= kin * (1 - kout);
+  ctx.translate(W / 2 + dx, 470 + dy); ctx.scale(sc, sc); ctx.translate(-W / 2, -470);
+  fn(t - s0);
+  ctx.restore();
+}
+// subtitles / labels slide: in from below, out upwards — consecutive lines hand over without a dip
+function slideText(t, t0, t1, draw) {
+  const kin = easeOut(prog(t, t0, t0 + 0.18)), kout = easeIO(prog(t, t1 - 0.16, t1));
+  const a = kin * (1 - kout); if (a <= 0) return;
+  draw(a, (1 - kin) * 16 - kout * 14);
+}
+function sub(t, t0, t1, zh, en) {
+  slideText(t, t0, t1, (a, dy) => {
+    text(zh, W / 2, 948 + dy, { size: 46, weight: 700, alpha: a, spacing: 2 });
+    text(en, W / 2, 996 + dy, { size: 28, family: F.en, italic: true, color: C.gray, alpha: a * 0.95 });
+  });
+}
+function label(t, t0, t1, str) {
+  slideText(t, t0, t1, (a, dy) => {
+    text(str, W / 2, 74 + dy, { size: 24, color: C.gold, alpha: a * 0.85, spacing: 6 });
+    ctx.save(); ctx.globalAlpha *= a * 0.5; ctx.strokeStyle = C.gold; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 40, 92 + dy); ctx.lineTo(W / 2 + 40, 92 + dy); ctx.stroke(); ctx.restore();
+  });
+}
+
+// ---------- reusable drawings ----------
+function clockFace(x, y, R, hours, a = 1, glow = 0) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  if (glow > 0) { const g = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * 1.6); g.addColorStop(0, `rgba(232,207,148,${0.18 * glow})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * 1.6, 0, 6.283); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(234,234,242,0.85)'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.283); ctx.stroke();
+  for (let i = 0; i < 60; i++) { const an = i / 60 * 6.283, big = i % 5 === 0; ctx.strokeStyle = big ? 'rgba(234,234,242,0.9)' : 'rgba(234,234,242,0.3)'; ctx.lineWidth = big ? 5 : 2; ctx.beginPath(); ctx.moveTo(Math.cos(an) * (R - (big ? 26 : 12)), Math.sin(an) * (R - (big ? 26 : 12))); ctx.lineTo(Math.cos(an) * (R - 6), Math.sin(an) * (R - 6)); ctx.stroke(); }
+  const ha = (hours % 12) / 12 * 6.283 - Math.PI / 2, ma = (hours % 1) * 6.283 - Math.PI / 2;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = C.goldHi; ctx.lineWidth = 12; ctx.shadowColor = 'rgba(232,207,148,0.6)'; ctx.shadowBlur = 16;
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ha) * R * 0.5, Math.sin(ha) * R * 0.5); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(ma) * R * 0.78, Math.sin(ma) * R * 0.78); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.fillStyle = C.goldHi; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+function hhmm(h) { h = ((h % 24) + 24) % 24; const H = Math.floor(h), M = Math.floor((h - H) * 60); return String(H).padStart(2, '0') + ':' + String(M).padStart(2, '0'); }
+function card(x, y, w, h, a = 1, glow = 0.45) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.shadowColor = `rgba(232,207,148,${glow})`; ctx.shadowBlur = 36;
+  roundRect(x - w / 2, y - h / 2, w, h, 20); ctx.fillStyle = '#141414'; ctx.fill(); ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(201,169,106,0.55)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+}
+function noteCard(x, y, w, big, small, rot, k, a = 1) {
+  if (k <= 0) return;
+  const drop = (1 - easeOut(Math.min(1, k))) * 260;
+  ctx.save(); ctx.globalAlpha *= a * Math.min(1, k * 3); ctx.translate(x, y - drop); ctx.rotate(rot);
+  ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+  roundRect(-w / 2, -110, w, 220, 8); ctx.fillStyle = '#EDE4D3'; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  text(big, 0, -6, { size: 40, weight: 700, color: '#2a2118' });
+  text(small, 0, 52, { size: 24, color: '#6b5a40' });
+  ctx.restore();
+}
+
+// ---------- shared characters & effects ----------
+function person(x, y, s, col = C.goldHi, rot = 0, a = 1) {   // (x, y) = feet
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -62, 17, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-27, 0); ctx.quadraticCurveTo(-29, -40, 0, -40); ctx.quadraticCurveTo(29, -40, 27, 0); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+const SPARKS = (() => { const r = mulberry32(97); return Array.from({ length: 28 }, () => ({ an: r() * 6.283, sp: 220 + r() * 520, s: 2 + r() * 4, red: r() < 0.5 })); })();
+function burst(x, y, age, scale = 1) {
+  if (age < 0 || age > 0.8) return;
+  SPARKS.forEach(p => {
+    const d = p.sp * scale * (age - 0.6 * age * age), a = 1 - age / 0.8;
+    ctx.fillStyle = p.red ? `rgba(224,85,74,${a})` : `rgba(245,214,150,${a})`;
+    ctx.beginPath(); ctx.arc(x + Math.cos(p.an) * d, y + Math.sin(p.an) * d, p.s * (1 - age), 0, 6.283); ctx.fill();
+  });
+}
+
+const BLUE = [91, 141, 239], REDP = [210, 73, 63], GREYP = [106, 110, 122], PALE = [169, 195, 245], DIMC = [70, 74, 88], DIMR = [150, 62, 58];
+const rgb = (c, a = 1) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${a})`;
+const mixc = (c1, c2, k) => [lerp(c1[0], c2[0], k), lerp(c1[1], c2[1], k), lerp(c1[2], c2[2], k)];
+const shakeAt = (t, t0) => { const a = t - t0; return a > 0 && a < 0.5 ? 8 * Math.exp(-9 * a) * Math.sin(70 * a) : 0; };
+const pulseAt = (t, t0, w = 0.16) => Math.exp(-Math.pow((t - t0) / w, 2));
+const ovAlpha = (t, s0, s1) => easeOut(prog(t, s0 - 0.1, s0 + 0.35)) * (1 - easeIO(prog(t, s1 - 0.3, s1 + 0.1)));
+// ---------- the balance scale (also the huge faint glue layer) ----------
+function balance(x, y, s, tilt, a = 1, line = 'rgba(234,234,242,0.9)', lw = 6) {
+  const L = 280, ex = L * Math.cos(tilt), ey = L * Math.sin(tilt);
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.strokeStyle = line; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 330); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-120, 345); ctx.lineTo(120, 345); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-ex, -ey); ctx.lineTo(ex, ey); ctx.stroke();
+  [[-ex, -ey], [ex, ey]].forEach(([px, py]) => {
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - 70, py + 150); ctx.moveTo(px, py); ctx.lineTo(px + 70, py + 150); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px, py + 150, 70, 0, Math.PI); ctx.stroke();
+  });
+  ctx.fillStyle = line; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 6.283); ctx.fill();
+  ctx.restore();
+  return { L: [x - ex * s, y + (-ey + 150) * s], R: [x + ex * s, y + (ey + 150) * s] };
+}
+function glue(t) {
+  balance(W / 2, 300, 1.55, 0.14 * Math.sin(t * 0.35), 0.07, 'rgba(234,234,242,1)', 3);
+  let p = 0; Object.entries(S).forEach(([k, [s0]]) => { if (s0 > 0) p = Math.max(p, Math.exp(-Math.pow((t - s0) / 0.22, 2))); });
+  if (p > 0.01) { const g = ctx.createRadialGradient(W / 2, 470, 20, W / 2, 470, 900); g.addColorStop(0, `rgba(232,207,148,${0.13 * p})`); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+}
+function stamp2(x, y, rot, w, str, size, k, col) {
+  if (k <= 0) return;
+  const hh = Math.max(112, size * 1.6);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); const ss = lerp(2.6, 1, easeOut(k)); ctx.scale(ss, ss); ctx.globalAlpha *= Math.min(1, k * 4);
+  ctx.strokeStyle = col; ctx.lineWidth = 8; roundRect(-w / 2, -hh / 2, w, hh, 12); ctx.stroke(); ctx.lineWidth = 3; roundRect(-w / 2 + 12, -hh / 2 + 12, w - 24, hh - 24, 8); ctx.stroke();
+  text(str, 0, size * 0.36, { size, family: F.serif, weight: 900, color: col, spacing: 4 }); ctx.restore();
+}
+function tagCard(x, y, str, a = 1, size = 36, w = 340, col = null) {
+  if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8; roundRect(-w / 2, -32, w, 64, 10); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowColor = 'transparent';
+  if (col) { ctx.fillStyle = rgb(col); ctx.fillRect(-w / 2, -32, 10, 64); }
+  text(str, 6, size * 0.36, { size, weight: 700, color: '#2a2118' }); ctx.restore();
+}
+
+function easeIn2(k) { return k * k; }
+const GOLD = [201, 169, 106], GOLDH = [232, 207, 148];
+
+// ---------- the golden bell mascot: (x, y) = hanging point, body hangs below ----------
+function bell(x, y, s, o = {}) {
+  const { swing = 0, mood = 1, t = 0, a = 1, glow = 0, clap = 0, feet = false, squash = 0 } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(swing); ctx.scale(s * (1 + squash * 0.06), s * (1 - squash * 0.08));
+  if (glow > 0) { ctx.shadowColor = `rgba(232,207,148,${0.8 * glow})`; ctx.shadowBlur = 60 * glow; }
+  ctx.strokeStyle = '#8a6a32'; ctx.lineWidth = 10; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(0, -34, 16, 0, 6.283); ctx.stroke();
+  const g = ctx.createLinearGradient(-130, 0, 130, 0);
+  g.addColorStop(0, '#8a6a32'); g.addColorStop(0.3, '#E8CF94'); g.addColorStop(0.6, '#C9A96A'); g.addColorStop(1, '#7a5b28');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(-36, 10); ctx.bezierCurveTo(-36, -22, 36, -22, 36, 10);
+  ctx.bezierCurveTo(40, 100, 70, 140, 126, 176); ctx.lineTo(126, 200); ctx.lineTo(-126, 200); ctx.lineTo(-126, 176);
+  ctx.bezierCurveTo(-70, 140, -40, 100, -36, 10); ctx.closePath(); ctx.fill();
+  roundRect(-136, 194, 272, 28, 14); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.beginPath(); ctx.ellipse(-62, 96, 12, 46, 0.25, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#E8CF94'; ctx.beginPath(); ctx.arc(clap * 30, 240, 21, 0, 6.283); ctx.fill();
+  const bl = Math.sin(t * 2.1) > 0.96 ? 0.15 : 1;
+  [-36, 36].forEach(ex => {
+    if (mood > 0.5) { ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(ex, 124, 13, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, 120, 12, 15 * bl, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#2a2118'; ctx.beginPath(); ctx.ellipse(ex + 2, 122, 6, 8 * bl, 0, 0, 6.283); ctx.fill(); }
+  });
+  ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(0, 142, mood > 0.5 ? 20 : 10, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  if (feet) { ctx.fillStyle = '#7a5b28'; roundRect(-96, 222, 60, 26, 12); ctx.fill(); roundRect(36, 222, 60, 26, 12); ctx.fill(); }
+  ctx.restore();
+}
+function coin(x, y, r, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y);
+  ctx.fillStyle = '#C9A96A'; ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.42, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#E8CF94'; ctx.beginPath(); ctx.ellipse(0, -r * 0.1, r * 0.78, r * 0.28, 0, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+const bigNum = (str, x, y, size, a = 1, k = 1) => {
+  const sc = lerp(1.35, 1, easeOut(clamp(k)));
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc);
+  ctx.shadowColor = 'rgba(232,207,148,0.5)'; ctx.shadowBlur = 40;
+  text(str, 0, 0, { size, family: F.serif, weight: 900, color: C.goldHi, alpha: a * Math.min(1, k * 4) });
+  ctx.restore();
+};
+
+function arrow(x, y, s, up, col, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, up ? -s : s); ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(0, 50); ctx.lineTo(-38, 8); ctx.lineTo(-14, 8); ctx.lineTo(-14, -50); ctx.lineTo(14, -50); ctx.lineTo(14, 8); ctx.lineTo(38, 8); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+// ---------- the silver orb mascot (stand-in for OpenAI; not their logo): (x, y) = ground ----------
+function orb(x, y, s, o = {}) {
+  const { mood = 0, t = 0, a = 1, feet = true, squash = 0, hop = 0 } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y - hop); ctx.scale(s * (1 + squash * 0.1), s * (1 - squash * 0.12));
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 4 + hop * 0.2, 90, 12, 0, 0, 6.283); ctx.fill();
+  if (feet) { ctx.fillStyle = '#56627a'; roundRect(-62, -34, 46, 34, 14); ctx.fill(); roundRect(16, -34, 46, 34, 14); ctx.fill(); }
+  const g = ctx.createRadialGradient(-34, -190, 10, 0, -140, 120); g.addColorStop(0, '#F4F8FF'); g.addColorStop(0.55, '#A9B8D2'); g.addColorStop(1, '#52627E');
+  ctx.shadowColor = 'rgba(170,190,225,0.35)'; ctx.shadowBlur = 40; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, -140, 104, 0, 6.283); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.ellipse(-52, -186, 14, 34, 0.5, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = '#1f2635'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  [-36, 36].forEach(ex => {
+    if (mood > 0.5) { ctx.beginPath(); ctx.arc(ex, -134, 13, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+    else { const bl = Math.sin(t * 2.0 + ex) > 0.96 ? 0.15 : 1; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, -138, 12, 15 * bl, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = '#1f2635'; ctx.beginPath(); ctx.ellipse(ex + 2, -136, 6, 8 * bl, 0, 0, 6.283); ctx.fill();
+      if (mood < -0.5) { ctx.beginPath(); ctx.moveTo(ex - 14 * Math.sign(ex), -168 + 8 * Math.sign(ex) * -1); ctx.lineTo(ex + 14 * Math.sign(ex), -160); ctx.stroke(); } }
+  });
+  ctx.lineWidth = 6; ctx.beginPath();
+  if (mood > 0.5) ctx.arc(0, -120, 20, 0.15 * Math.PI, 0.85 * Math.PI); else if (mood < -0.5) ctx.arc(0, -96, 16, 1.15 * Math.PI, 1.85 * Math.PI); else { ctx.moveTo(-14, -106); ctx.lineTo(14, -106); }
+  ctx.stroke();
+  if (mood < -0.5) { ctx.fillStyle = 'rgba(140,200,255,0.9)'; ctx.beginPath(); ctx.ellipse(86, -150 + 5 * Math.sin(t * 5), 6, 10, 0, 0, 6.283); ctx.fill(); }
+  ctx.restore();
+}
+const SILV = '#BFCBE0';
+function pole(x, y, h, col, a = 1) { ctx.save(); ctx.globalAlpha *= a; ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - h); ctx.stroke(); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 12, 0, 6.283); ctx.fill(); ctx.restore(); }
+
+// ---------- more characters & props ----------
+const bellG = (x, gy, s, o = {}) => bell(x, gy - 238 * s, s, Object.assign({ feet: true }, o));
+function cloud(x, y, s, o = {}) {                       // a friendly cloud (cloud platform)
+  const { t = 0, mood = 1, chew = 0, a = 1, label = '' } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y + 8 * Math.sin(t * 2 + x)); ctx.scale(s * (1 + 0.05 * chew * Math.sin(t * 24)), s * (1 - 0.04 * chew * Math.sin(t * 24)));
+  const g = ctx.createLinearGradient(0, -90, 0, 70); g.addColorStop(0, '#F7FAFF'); g.addColorStop(1, '#AEBBD2'); ctx.fillStyle = g;
+  ctx.shadowColor = 'rgba(190,205,235,0.35)'; ctx.shadowBlur = 30;
+  [[-70, 10, 52], [0, -26, 68], [70, 8, 54], [-20, 22, 62], [30, 24, 58]].forEach(([cx, cy, r]) => { ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.283); ctx.fill(); });
+  ctx.shadowBlur = 0; ctx.strokeStyle = '#1f2635'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  [-30, 30].forEach(ex => { ctx.beginPath(); if (mood > 0.5) ctx.arc(ex, 0, 11, Math.PI * 1.1, Math.PI * 1.9); else { ctx.moveTo(ex - 8, 0); ctx.lineTo(ex + 8, 0); } ctx.stroke(); });
+  ctx.fillStyle = '#7a3f3f'; ctx.beginPath(); if (chew > 0) ctx.ellipse(0, 34, 16, 10 + 6 * Math.abs(Math.sin(t * 24)), 0, 0, 6.283); else ctx.arc(0, 26, 16, 0.1 * Math.PI, 0.9 * Math.PI); chew > 0 ? ctx.fill() : ctx.stroke();
+  ctx.restore();
+  if (label) text(label, x, y + 118 * s, { size: 36, weight: 700, color: C.text, alpha: a });
+}
+function chipChar(x, gy, s, o = {}) {                   // a chip with a face (chipmaker)
+  const { t = 0, mood = 1, a = 1, hop = 0, label = '' } = o;
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, gy - hop); ctx.scale(s, s);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, 4, 90, 11, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#C9A96A'; for (let i = 0; i < 5; i++) { const px = -64 + i * 32; roundRect(px - 7, -190, 14, 26, 4); ctx.fill(); roundRect(px - 7, -26, 14, 26, 4); ctx.fill(); roundRect(-110, -150 + i * 28, 26, 14, 4); ctx.fill(); roundRect(84, -150 + i * 28, 26, 14, 4); ctx.fill(); }
+  const g = ctx.createLinearGradient(0, -190, 0, -20); g.addColorStop(0, '#3a3f4c'); g.addColorStop(1, '#1d2027'); ctx.fillStyle = g; ctx.strokeStyle = '#E8CF94'; ctx.lineWidth = 6; roundRect(-90, -170, 180, 150, 18); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = '#E8CF94'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+  [-34, 34].forEach(ex => { ctx.beginPath(); if (mood > 0.5) ctx.arc(ex, -108, 12, Math.PI * 1.1, Math.PI * 1.9); else { ctx.moveTo(ex - 8, -108); ctx.lineTo(ex + 8, -108); } ctx.stroke(); });
+  ctx.beginPath(); ctx.arc(0, -90, 18, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+  ctx.restore();
+  if (label) text(label, x, gy + 46 * s, { size: 36, weight: 700, color: C.text, alpha: a });
+}
+function sparkle(x, y, r, a) { ctx.save(); ctx.globalAlpha *= a; ctx.fillStyle = '#FFF0C8'; ctx.beginPath(); for (let i = 0; i < 8; i++) { const rad = i % 2 ? r * 0.25 : r, an = i / 8 * 6.283 - Math.PI / 2; ctx.lineTo(x + Math.cos(an) * rad, y + Math.sin(an) * rad); } ctx.closePath(); ctx.fill(); ctx.restore(); }
+function stars(x, y, t, a) { for (let i = 0; i < 3; i++) { const an = t * 6 + i * 2.094; sparkle(x + Math.cos(an) * 60, y + Math.sin(an) * 18, 14, a); } }
+function dustPuff(x, y, age) { if (age < 0 || age > 0.6) return; for (let i = 0; i < 5; i++) { const d = (i - 2) * 26 * (age + 0.2); ctx.fillStyle = `rgba(220,215,200,${0.5 * (1 - age / 0.6)})`; ctx.beginPath(); ctx.arc(x + d, y - 6 - 24 * age * (1 - Math.abs(i - 2) * 0.2), 14 * (1 + age * 1.5), 0, 6.283); ctx.fill(); } }
+function hourglass(x, y, s, p, a = 1) {
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.strokeStyle = SILV; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.beginPath(); ctx.moveTo(-34, -60); ctx.lineTo(34, -60); ctx.lineTo(4, 0); ctx.lineTo(34, 60); ctx.lineTo(-34, 60); ctx.lineTo(-4, 0); ctx.closePath(); ctx.stroke();
+  ctx.fillStyle = '#E8CF94'; const top = 1 - p; ctx.beginPath(); ctx.moveTo(-28 * top, -56 + 56 * p); ctx.lineTo(28 * top, -56 + 56 * p); ctx.lineTo(3, -4); ctx.lineTo(-3, -4); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-3, 0); ctx.lineTo(3, 0); ctx.lineTo(3, 56 - 40 * p); ctx.lineTo(-3, 56 - 40 * p); ctx.fill(); ctx.beginPath(); ctx.moveTo(-30 * p, 56); ctx.lineTo(30 * p, 56); ctx.lineTo(0, 56 - 38 * p); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function sign(x, y, w, big, small, k, col = C.goldHi) {         // a signboard that pops up
+  if (k <= 0) return; const sc = clamp(easeBack(clamp(k)), 0, 1.1);
+  ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.globalAlpha *= clamp(k * 3);
+  ctx.strokeStyle = '#8a6a32'; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(0, 60); ctx.lineTo(0, 150); ctx.stroke();
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 20; roundRect(-w / 2, -60, w, 124, 12); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = col; ctx.fillRect(-w / 2, -60, w, 12);
+  text(big, 0, 10, { size: 46, weight: 700, family: F.serif, color: '#2a2118' }); text(small, 0, 46, { size: 26, color: '#6b5a40' }); ctx.restore();
+}
+const lerpKeys = (v, keys) => { for (let i = 1; i < keys.length; i++) if (v <= keys[i][0]) { const [a, xa] = keys[i - 1], [c, xc] = keys[i]; return lerp(xa, xc, easeIO(prog(v, a, c))); } return keys[keys.length - 1][1]; };
+
+
+const PAL = {
+  gold: ['#8a6a32', '#F3DCA4', '#C9A96A', '#7a5b28', '#E8CF94', '232,207,148'],
+  silver: ['#56627a', '#F4F8FF', '#A9B8D2', '#46536c', '#DCE5F5', '190,205,235'],
+  bronze: ['#5d4a36', '#C9A886', '#9A7B5B', '#4a3a2a', '#B89A78', '200,170,130'] };
+function bellPath() { ctx.beginPath(); ctx.moveTo(-36, 10); ctx.bezierCurveTo(-36, -22, 36, -22, 36, 10); ctx.bezierCurveTo(40, 100, 70, 140, 126, 176); ctx.lineTo(126, 200); ctx.lineTo(-126, 200); ctx.lineTo(-126, 176); ctx.bezierCurveTo(-70, 140, -40, 100, -36, 10); ctx.closePath(); }
+function clothShape() {
+  ctx.beginPath(); ctx.moveTo(-160, 188); ctx.bezierCurveTo(-124, 60, -72, -64, 0, -64); ctx.bezierCurveTo(72, -64, 124, 60, 160, 188);
+  for (let i = 0; i < 6; i++) { const x0 = 160 - i * 53.3, x1 = x0 - 53.3; ctx.quadraticCurveTo((x0 + x1) / 2, 188 + (i % 2 ? -22 : 26), x1, 188); } ctx.closePath();
+  const g = ctx.createLinearGradient(-160, 0, 160, 0); g.addColorStop(0, '#59606f'); g.addColorStop(0.35, '#b4bbca'); g.addColorStop(0.65, '#858c9c'); g.addColorStop(1, '#474d5b'); ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = 'rgba(40,44,54,0.45)'; ctx.lineWidth = 4; [[-30, -110, 150], [24, 70, 170], [60, 128, 160]].forEach(([x0, x1, y1]) => { ctx.beginPath(); ctx.moveTo(x0, -30); ctx.quadraticCurveTo((x0 + x1) / 2 + 10, 60, x1, y1); ctx.stroke(); });
+}
+function cloth(x, y, s, rot = 0, sy = 1, a = 1) { ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s * sy); ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 30; clothShape(); ctx.restore(); }
+function bell2(x, y, s, o = {}) {
+  const { kind = 'gold', swing = 0, mood = 1, glow = 0, covered = false, clap = 0, a = 1 } = o, P = PAL[kind];
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.rotate(swing); ctx.scale(s, s);
+  if (glow > 0) { ctx.shadowColor = `rgba(${P[5]},${0.8 * glow})`; ctx.shadowBlur = 70 * glow; }
+  ctx.strokeStyle = P[0]; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, -34, 16, 0, 6.283); ctx.stroke();
+  const g = ctx.createLinearGradient(-130, 0, 130, 0); g.addColorStop(0, P[0]); g.addColorStop(0.3, P[1]); g.addColorStop(0.6, P[2]); g.addColorStop(1, P[3]); ctx.fillStyle = g;
+  bellPath(); ctx.fill(); roundRect(-136, 194, 272, 28, 14); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.beginPath(); ctx.ellipse(-62, 96, 12, 46, 0.25, 0, 6.283); ctx.fill();
+  ctx.fillStyle = P[4]; ctx.beginPath(); ctx.arc(clap * 34, 240, 21, 0, 6.283); ctx.fill();
+  if (!covered) {
+    ctx.strokeStyle = '#2a2118'; ctx.lineWidth = 7;
+    [-36, 36].forEach(ex => { ctx.beginPath(); if (mood > 0.5) ctx.arc(ex, 124, 13, Math.PI * 1.1, Math.PI * 1.9); else { ctx.fillStyle = '#fff'; ctx.ellipse(ex, 120, 12, 15, 0, 0, 6.283); ctx.fill(); ctx.beginPath(); ctx.fillStyle = '#2a2118'; ctx.ellipse(ex + 2, 122, 6, 8, 0, 0, 6.283); ctx.fill(); ctx.beginPath(); } ctx.stroke(); });
+    ctx.lineWidth = 6; ctx.beginPath(); if (mood > 0.5) ctx.arc(0, 142, 20, 0.15 * Math.PI, 0.85 * Math.PI); else if (mood < -0.5) ctx.arc(0, 166, 14, 1.15 * Math.PI, 1.85 * Math.PI); else { ctx.moveTo(-12, 152); ctx.lineTo(12, 152); } ctx.stroke();
+  } else clothShape();
+  ctx.restore();
+}
+function beam(y = 150, x0 = 120, x1 = 1800) {
+  ctx.save(); const g = ctx.createLinearGradient(0, y - 14, 0, y + 14); g.addColorStop(0, '#E8CF94'); g.addColorStop(1, '#7a5b28'); ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.35)'; ctx.shadowBlur = 24;
+  roundRect(x0, y - 13, x1 - x0, 26, 13); ctx.fill(); ctx.restore();
+}
+function rope(x, y0, y1, col = '#C9A96A', lw = 7) { ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke(); ctx.restore(); }
+function hung(x, hy, s, o = {}) { rope(x, 150, hy - 46 * s, o.kind === 'silver' ? '#A9B8D2' : '#C9A96A'); bell2(x, hy, s, o); }
+function arcs(x, y, r0, n, col = '232,207,148', gap = 46, lw = 7) { ctx.save(); ctx.lineCap = 'round'; for (let i = 0; i < n; i++) { ctx.strokeStyle = `rgba(${col},${0.85 - i * 0.8 / n})`; ctx.lineWidth = lw; [[-0.45, 0.45], [Math.PI - 0.45, Math.PI + 0.45]].forEach(([a0, a1]) => { ctx.beginPath(); ctx.arc(x, y, r0 + i * gap, a0, a1); ctx.stroke(); }); } ctx.restore(); }
+function ruler(x, y0, y1, step, col, w = 54) {
+  ctx.save(); ctx.fillStyle = '#EDE4D3'; ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 20; roundRect(x - w / 2, y0, w, y1 - y0, 8); ctx.fill(); ctx.shadowBlur = 0; ctx.fillStyle = col; ctx.fillRect(x - w / 2, y0, 10, y1 - y0);
+  ctx.strokeStyle = '#2a2118'; let i = 0; for (let y = y1 - 10; y > y0 + 6; y -= step, i++) { ctx.lineWidth = step > 20 ? 5 : 3; ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2 - (i % 5 === 0 || step > 20 ? 30 : 16), y); ctx.stroke(); } ctx.restore();
+}
+
+// =====================================================================
+//  「两口钟」: one beam, two bells. The gold one (Anthropic) loses its cloth; the silver one (OpenAI) stays covered.
+//  The bells live in a persistent layer (one continuous shot); every scene only adds props around them.
+// =====================================================================
+const SILVC = 'rgba(191,203,224,1)', GOLDC = 'rgba(232,207,148,1)';
+const beatOf = t => t < INTRO ? t / INTRO * TB : TB + (t - INTRO) / BEAT;
+const flyTo2 = (p, x0, y0, x1, y1, h) => { const e = easeIO(clamp(p)); return [lerp(x0, x1, e), lerp(y0, y1, e) - h * Math.sin(Math.PI * clamp(p))]; };
+function kf(nb, arr) {                                  // [[beat, ...values]] -> eased interpolation
+  if (nb <= arr[0][0]) return arr[0].slice(1);
+  for (let i = 1; i < arr.length; i++) if (nb <= arr[i][0]) { const k = easeIO(prog(nb, arr[i - 1][0], arr[i][0])); return arr[i].slice(1).map((v, j) => lerp(arr[i - 1][j + 1], v, k)); }
+  return arr[arr.length - 1].slice(1);
+}
+function lin(nb, arr) { for (let i = 1; i < arr.length; i++) if (nb <= arr[i][0]) return lerp(arr[i - 1][1], arr[i][1], prog(nb, arr[i - 1][0], arr[i][0])); return arr[arr.length - 1][1]; }
+const GK = [[0, 230, 250, 1.15], [3.6, 230, 250, 1.15], [4.8, 500, 250, 1.4], [14, 500, 250, 1.4], [15.5, 470, 250, 1.3], [23, 470, 250, 1.3], [24.3, 600, 215, 1.35], [25.8, 600, 215, 1.65], [27.2, 600, 215, 2.0], [30, 600, 215, 2.0],
+  [31.4, 430, 280, 1.3], [43, 430, 280, 1.3], [44, 960, 190, 2.0], [50, 960, 190, 2.0], [51.6, 330, 250, 1.3], [57, 330, 250, 1.3], [58.4, 250, 240, 0.95], [66, 250, 240, 0.95]];
+const SK = [[0, 1690, 250, 1.15], [3.6, 1690, 250, 1.15], [4.8, 1420, 250, 1.4], [14, 1420, 250, 1.4], [15.5, 1450, 250, 1.3], [23, 1450, 250, 1.3], [24.5, 1690, 250, 0.95], [30, 1690, 250, 0.95],
+  [31.4, 1850, 250, 0.6], [43, 1850, 250, 0.6], [44, 1730, 240, 0.72], [50, 1730, 240, 0.72], [51.6, 1790, 250, 0.9], [57, 1790, 250, 0.9], [58.4, 1560, 250, 1.4], [66, 1560, 250, 1.4]];
+const GGLOW = [[0, 0.7], [4, 0.7], [4.8, 0.1], [7.6, 0.1], [8.4, 0.8], [11, 0.6], [14, 0.4], [23, 0.4], [25, 0.7], [28, 0.7], [30, 0.3], [38, 0.3], [43.9, 1], [50, 0.8], [51.5, 0.3], [57, 0.3], [58, 0.7], [66, 0.7]];
+const YANK = [7.6, 8.6], DROP_C = [4.1, 4.8];
+function bellsLayer(t) {
+  const nb = beatOf(t), g = kf(nb, GK), sv = kf(nb, SK), tr = T(44);
+  const a = Math.max(0, t - tr), yk = Math.max(0, t - T(YANK[0] + 0.5));
+  let swing = 0.03 * Math.sin(t * 3), clap = 0, mood = nb >= 51 && nb < 57 ? 0 : 1;
+  if (nb < 4) { swing = 0.1 * Math.sin(t * 6); clap = 0.6 * Math.sin(t * 6); }
+  if (nb >= 8 && nb < 14) swing = 0.2 * Math.exp(-3 * yk) * Math.sin(8 * yk) + 0.03 * Math.sin(t * 3);
+  if (nb >= 43 && nb < 44) swing = 0.05 * Math.sin(t * 40) * prog(nb, 43, 44);
+  if (nb >= 44 && nb < 51) { swing = 0.30 * Math.exp(-1.3 * a) * Math.sin(7 * a); clap = -Math.sin(7 * a) * Math.exp(-1.3 * a); }
+  const dy = nb >= 30 && nb < 38 ? 10 * Math.pow(Math.sin(t * 5), 2) : 0;
+  // ropes
+  rope(g[0], 150, g[1] + dy - 46 * g[2], '#C9A96A'); rope(sv[0], 150, sv[1] - 46 * sv[2], '#A9B8D2');
+  beam();
+  // gold
+  const glow = lin(nb, GGLOW) + (nb >= 44 && nb < 51 ? 0.4 * pulseAt(t, tr + 0.05, 0.4) : 0);
+  bell2(g[0], g[1] + dy, g[2], { kind: 'gold', swing, clap, mood, glow: clamp(glow, 0, 1) });
+  const gs = nb >= DROP_C[0] && nb < YANK[0];
+  if (nb >= DROP_C[0] && nb < YANK[0] + 0.0001) { const k = prog(nb, DROP_C[0], DROP_C[1]); cloth(g[0], g[1] - (1 - easeIn2(k)) * 800, g[2], 0.02 * Math.sin(t * 2), 1, 1); }
+  else if (nb >= YANK[0] && nb < YANK[1]) {
+    const k = easeIO(prog(nb, YANK[0], YANK[1])); cloth(lerp(500, 190, k), lerp(250, 690, k) - 140 * Math.sin(Math.PI * k), lerp(1.4, 1.0, k), -0.5 * k - 0.8 * Math.sin(Math.PI * k), lerp(1, 0.6, k), 1);
+  } else if (nb >= YANK[1] && nb < 31) cloth(190, 690, 1.0, -0.5, 0.6, 1 - prog(nb, 29, 31));
+  // silver (always under its cloth)
+  const bt = nb >= 44 && nb < 51 ? Math.max(0, a - 0.15) : 0;
+  const sSwing = 0.02 * Math.sin(t * 2.2) + (nb >= 44 && nb < 52 ? 0.18 * Math.exp(-1.0 * bt) * Math.sin(6 * bt) : 0);
+  bell2(sv[0], sv[1], sv[2], { kind: 'silver', swing: sSwing, glow: 0 });
+  cloth(sv[0], sv[1], sv[2], sSwing + (nb >= 44 && nb < 52 ? 0.12 * Math.exp(-1.0 * bt) * Math.sin(9 * bt) : 0), 1 + (nb >= 44 && nb < 52 ? 0.07 * Math.exp(-1.2 * bt) * Math.sin(11 * bt) : 0), 1);
+  return { g, sv, dy };
+}
+const tagIn = (x, y, str, k, size, w, col) => { if (k <= 0) return; ctx.save(); ctx.translate(-(1 - easeOut(clamp(k))) * 260, 0); tagCard(x, y, str, clamp(k * 3), size, w, col); ctx.restore(); };
+
+// ---------- title ----------
+function sceneTitleCard(t) {
+  const [, d1] = S.D_title, kout = easeIO(prog(t, d1 - 0.3, d1 + 0.1));
+  if (kout >= 1) return;
+  const slam = easeOut(prog(t, 0, 0.28)), sc = lerp(1.18, 1, slam) * lerp(1, 0.92, kout);
+  arcs(230, 440, 200, 2);
+  ctx.save(); ctx.globalAlpha = 1 - kout; ctx.translate(W / 2, 0); ctx.scale(sc, sc); ctx.translate(-W / 2, 0);
+  const g = ctx.createLinearGradient(600, 0, 1320, 0), sw = clamp(t / 0.8);
+  g.addColorStop(0, '#B8935A'); g.addColorStop(clamp(sw - 0.12), '#C9A96A'); g.addColorStop(sw, '#FFF0C8'); g.addColorStop(clamp(sw + 0.12), '#C9A96A'); g.addColorStop(1, '#B8935A');
+  ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36;
+  ctx.font = `900 64px ${F.serif}`; ctx.fillText('Anthropic vs OpenAI', 960, 380); ctx.font = `900 240px ${F.serif}`; ctx.fillText('两口钟', 960, 630); ctx.shadowBlur = 0;
+  text('一口先响，一口还蒙着布', 960, 750, { size: 60, weight: 700, spacing: 8 }); text('Two bells: one rings first, one is still under wraps', 960, 806, { size: 30, family: F.en, italic: true, color: C.gray });
+  ctx.restore();
+  const flash = Math.exp(-t / 0.09) * 0.55; if (flash > 0.01) { ctx.fillStyle = `rgba(255,240,210,${flash})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// ---------- ① the cover comes off ----------
+function sceneCover(lt, t) {
+  const tg = [['6月1日 · 保密递交', 340, 1.0, [150, 156, 170]], ['10月26日 · 文件公开', 440, 3.6, [232, 207, 148]], ['11月10日 · 启动路演', 540, 6.7, [232, 207, 148]]];
+  tg.forEach(([s2, y, at, col]) => tagIn(960, y, s2, prog(lt, b(at), b(at) + 0.45), 34, 440, col));
+  const ky = prog(lt, b(3.6), b(3.6) + 0.5); text('Anthropic', 500, 668, { size: 32, weight: 700, color: C.goldHi, alpha: prog(lt, b(0.6), b(1.2)) }); text('OpenAI', 1420, 668, { size: 32, weight: 700, color: SILV, alpha: prog(lt, b(0.6), b(1.2)) });
+  if (ky > 0) { text('布，掀开了', 560, 790, { size: 64, family: F.serif, weight: 900, color: C.goldHi, alpha: clamp(ky * 2) }); }
+  burst(500, 300, lt - b(4.0), 1.2);
+  const ks = prog(lt, b(7.3), b(7.3) + 0.4); stamp2(1420, 760, -0.06, 330, '未公开', 64, ks, SILVC); tagIn(1420, 858, '最早 2027？· 据报道', prog(lt, b(8.0), b(8.4)), 32, 420, [191, 203, 224]);
+}
+
+// ---------- ② two rulers ----------
+function sceneRulers(lt, t) {
+  const kd = (a) => easeOut(prog(lt, b(a), b(a) + 0.5));
+  [[720, 12, '#C9A96A', 0.4, 1.9, 0.78, [232, 207, 148]], [1200, 40, '#A9B8D2', 1.0, 3.2, 0.52, [191, 203, 224]]].forEach(([x, st, col, a0, a1, lvl, rgbc], i) => {
+    const k = kd(a0), drop = (1 - k) * 600; ctx.save(); ctx.translate(0, -drop); ruler(x, 190, 590, st, col); ctx.restore();
+    const m = easeIO(prog(lt, b(a1), b(a1) + 1.4)), my = lerp(590, 590 - 400 * lvl, m);
+    if (k > 0.9) { ctx.save(); ctx.fillStyle = `rgba(${rgbc.join(',')},0.9)`; ctx.beginPath(); ctx.moveTo(x - 60, my); ctx.lineTo(x - 30, my - 14); ctx.lineTo(x - 30, my + 14); ctx.closePath(); ctx.fill(); ctx.fillRect(x - 30, my - 3, 90, 6); ctx.restore(); }
+  });
+  const kn = prog(lt, b(5.4), b(5.8)); if (kn > 0) { ctx.save(); ctx.translate(960 + shakeAt(lt, b(5.4)), 0); bigNum('≠', 0, 480, 280, 1, kn); ctx.restore(); burst(960, 440, lt - b(5.4), 1.1); }
+  const r1 = prog(lt, b(2.8), b(3.3)), r2 = prog(lt, b(4.2), b(4.7));
+  text('≈ 680 亿', 500, 720, { size: 100, family: F.serif, weight: 900, color: C.goldHi, alpha: r1 }); text('总额尺：云平台卖的，也全算', 500, 780, { size: 34, weight: 700, color: C.text, alpha: r1 });
+  text('≈ 500 亿', 1420, 720, { size: 100, family: F.serif, weight: 900, color: SILV, alpha: r2 }); text('净额尺：只算自己那份 · 据报道', 1420, 780, { size: 34, weight: 700, color: C.text, alpha: r2 });
+  text('年化收入 · 美元（Anthropic 为第三季度 × 4）', 960, 850, { size: 26, color: C.gray, alpha: prog(lt, b(6), b(6.5)) });
+}
+
+// ---------- ③ the gold bell swells (valuation) ----------
+function sceneSize(lt, t) {
+  const GXX = 600, GYY = 215;
+  const kg = easeOut(prog(lt, b(4.0), b(4.8)));
+  if (kg > 0) { ctx.save(); ctx.globalAlpha *= kg; ctx.translate(GXX, GYY); ctx.scale(2.5, 2.5); ctx.setLineDash([9, 7]); ctx.lineDashOffset = -lt * 20; ctx.strokeStyle = 'rgba(224,85,74,0.9)'; ctx.lineWidth = 2.2; bellPath(); ctx.stroke(); ctx.restore(); text('传闻 2 万亿', 1010, 790, { size: 40, weight: 700, color: '#E0554A', alpha: kg }); }
+  if ((lt > b(1.3) && lt < b(3.0)) || (lt > b(3.9) && lt < b(5.0))) for (let i = 0; i < 3; i++) { const p = (lt * 3 + i / 3) % 1; ctx.fillStyle = `rgba(255,240,200,${0.6 * (1 - p)})`; ctx.beginPath(); ctx.arc(GXX + 190 + p * 90, 560 - p * 120, 12 * (1 - p) + 4, 0, 6.283); ctx.fill(); }
+  const k5 = prog(lt, b(2.0), b(2.4)) * (1 - prog(lt, b(3.9), b(4.2)));
+  text('9650亿', 1190, 400, { size: 80, family: F.serif, weight: 900, color: C.goldHi, alpha: k5 }); text('5月 · 上次估值', 1190, 462, { size: 34, weight: 700, color: C.text, alpha: k5 });
+  const kn = prog(lt, b(4.3), b(4.7)); if (kn > 0) { bigNum('≈1.3 万亿', 1190, 400, 100, 1, kn); text('上市区间 · 据报道', 1190, 462, { size: 36, weight: 700, color: C.text, alpha: clamp(kn * 2) }); burst(1190, 380, lt - b(4.3), 0.9); }
+  const ko = prog(lt, b(0.6), b(1.1)); text('8520 亿', 1690, 590, { size: 64, family: F.serif, weight: 900, color: SILV, alpha: ko }); text('3 月 · 上次估值', 1690, 640, { size: 30, color: C.gray, alpha: ko });
+}
+
+// ---------- ④ / ⑤ the rope: the suppliers pull it; then they buy in ----------
+function ropeProps(lt, t, back) {
+  const BX = 430, HY = 280, S = 1.3;
+  ctx.save(); ctx.strokeStyle = '#B8935A'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.shadowColor = 'rgba(232,207,148,0.4)'; ctx.shadowBlur = 16;
+  const kr = easeOut(prog(lt, b(back ? -0.2 : 0.2), b(back ? 0.3 : 1.0)));
+  ctx.beginPath(); ctx.moveTo(1060, 150); ctx.lineTo(lerp(1060, 1190, kr), lerp(150, 610, kr)); if (kr > 0.99) ctx.lineTo(1840, 610); ctx.stroke(); ctx.restore();
+  if (kr > 0) { ctx.fillStyle = '#E8CF94'; ctx.beginPath(); ctx.arc(1060, 150, 24, 0, 6.283); ctx.fill(); ctx.fillStyle = '#7a5b28'; ctx.beginPath(); ctx.arc(1060, 150, 8, 0, 6.283); ctx.fill(); }
+  const names = [['亚马逊', 1270], ['谷歌', 1440], ['微软', 1610]];
+  names.forEach(([nm, x], i) => { const k = back ? 1 : easeBack(prog(lt, b(1.0 + i * 0.35), b(1.0 + i * 0.35) + 0.4)); if (k <= 0) return; ctx.save(); ctx.globalAlpha *= clamp(k); const pull = Math.abs(Math.sin(lt * 5 + i)); cloud(x, 548 - 10 * pull, 0.62 * clamp(k, 0, 1.05), { t: lt + i * 1.3, mood: 1, chew: pull > 0.8 ? 0.6 : 0 }); text(nm, x, 700, { size: 32, weight: 700, color: C.text }); ctx.restore(); });
+  const kc = back ? 1 : easeBack(prog(lt, b(2.1), b(2.5))); if (kc > 0) { chipChar(1775, 645 - 8 * Math.abs(Math.sin(lt * 5 + 2)), 0.62 * clamp(kc, 0, 1.05), { t: lt, mood: 1, a: clamp(kc) }); text('英伟达', 1775, 700, { size: 32, weight: 700, color: C.text, alpha: clamp(kc) }); }
+  text(back ? '拉绳的人，也成了股东' : '拉绳的：云平台和芯片公司', 1520, 800, { size: back ? 46 : 36, weight: 700, color: C.goldHi, alpha: prog(lt, b(back ? 0.6 : 2.6), b(back ? 1.0 : 3.0)) });
+  if (back) { for (let n = 0; n < 4; n++) for (let j = 0; j < 4; j++) { const sx = [1270, 1440, 1610, 1775][n], sy = n === 3 ? 520 : 520, p = (((lt - b(0.8)) * 0.8 + j / 4 + n * 0.19) % 1 + 1) % 1; if (lt < b(0.8)) continue; const [cx, cy] = flyTo2(p, sx, sy, 430, 330, 180 + 25 * n); coin(cx, cy, 18, Math.min(1, Math.min(p, 1 - p) * 8)); }
+    const dark = 0.45 * easeIn2(prog(lt, b(4.6), b(6))); if (dark > 0) { ctx.fillStyle = `rgba(0,0,0,${dark})`; ctx.fillRect(0, 0, W, 1080); } }
+}
+function sceneRope(lt, t) {
+  ropeProps(lt, t, false);
+  const kn = prog(lt, b(3.4), b(3.8)); if (kn > 0) { bigNum('≈ 9000 亿', 640, 770, 130, 1, kn); text('美元 · 算力合同（多年）', 640, 838, { size: 38, weight: 700, color: C.text, alpha: clamp(kn * 2) }); }
+}
+function scenePull(lt, t) {
+  ropeProps(lt, t, true);
+  const kn = prog(lt, b(1.4), b(1.8)); if (kn > 0) { bigNum('≈ 260 亿', 640, 770, 130, 1, kn); text('美元 · IPO 同步入股', 640, 838, { size: 38, weight: 700, color: C.text, alpha: clamp(kn * 2) }); }
+}
+
+// ---------- ⑥ the gold bell rings; the little bells answer ----------
+function sceneRing(lt, t) {
+  const a = Math.max(0, lt);
+  for (let i = 0; i < 5; i++) { const r = (a - 0.1 * i) * 1100; if (r > 0 && r < 1400) { ctx.strokeStyle = `rgba(232,207,148,${0.6 * (1 - r / 1400)})`; ctx.lineWidth = 9 * (1 - r / 1400) + 1; ctx.beginPath(); ctx.arc(960, 470, r, 0, 6.283); ctx.stroke(); } }
+  [[190, '云', -0.3, 0.9], [400, '芯片', -0.22, 1.1], [1500, '软件', 0.24, 1.3]].forEach(([x, nm, sw, dly]) => {
+    const d = Math.max(0, a - 0.15 * dly), ang = 0.32 * Math.exp(-1.1 * d) * Math.sin(8 * d) * Math.sign(sw), k = easeOut(prog(lt, -0.1, 0.4));
+    rope(x, 150, 240 - 46 * 0.5, '#B89A78'); bell2(x, 240, 0.5, { kind: 'bronze', swing: ang, mood: 0, clap: ang * 3, a: k }); text(nm, x + ang * 120, 440, { size: 36, weight: 700, color: C.text, alpha: k });
+  });
+  burst(960, 560, a, 1.5); burst(960, 560, a - 0.12, 1.0);
+  tagIn(960, 835, '据报道：11月18日定价 · 19日挂牌', prog(lt, b(0.8), b(1.3)), 32, 640);
+  const fl = Math.exp(-lt / 0.1) * 0.7; if (lt >= 0 && fl > 0.01) { ctx.fillStyle = `rgba(255,240,210,${fl})`; ctx.fillRect(0, 0, W, 1080); }
+  ctx.save(); ctx.translate(shakeAt(lt, 0) * 1.6, shakeAt(lt, 0.05) * 1.2); ctx.restore();
+}
+
+// ---------- ⑦ the echo fades ----------
+function waveSeg(x0, x1, amp, lw, al, k) {
+  ctx.save(); ctx.strokeStyle = C.goldHi; ctx.lineCap = 'round'; ctx.shadowColor = 'rgba(232,207,148,0.5)'; ctx.shadowBlur = 18; ctx.globalAlpha *= al; ctx.lineWidth = lw; ctx.beginPath();
+  for (let x = x0; x <= x0 + (x1 - x0) * k; x += 3) { const p = (x - x0) / (x1 - x0), y = 560 + amp * Math.sin(p * Math.PI) * Math.sin(p * Math.PI * 7); x === x0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke(); ctx.restore();
+}
+function sceneEcho(lt, t) {
+  waveSeg(620, 1040, 210, 9, 1, easeIO(prog(lt, b(0.4), b(1.8)))); waveSeg(1090, 1440, 70, 7, 0.9, easeIO(prog(lt, b(2.2), b(3.4)))); waveSeg(1490, 1790, 20, 5, 0.45, easeIO(prog(lt, b(4.4), b(5.4))));
+  const k1 = prog(lt, b(1.8), b(2.2)); if (k1 > 0) bigNum('+144%', 830, 290, 120, 1, k1);
+  const k2 = prog(lt, b(4.0), b(4.4)); if (k2 > 0) { ctx.save(); ctx.translate(shakeAt(lt, b(4.0)), 0); bigNum('+47%', 1265, 400, 120, 1, k2); ctx.restore(); burst(1265, 380, lt - b(4.0), 1.0); }
+  text('？', 1640, 480, { size: 100, family: F.serif, weight: 900, color: C.gray, alpha: prog(lt, b(4.8), b(5.3)) });
+  text('2 季度', 830, 800, { size: 36, weight: 700, color: C.text, alpha: prog(lt, b(1.6), b(2.0)) }); text('3 季度', 1265, 800, { size: 36, weight: 700, color: C.text, alpha: prog(lt, b(3.2), b(3.6)) }); text('下一季', 1640, 800, { size: 36, weight: 700, color: C.gray, alpha: prog(lt, b(5.0), b(5.4)) });
+}
+
+// ---------- ⑧ end: back to the opening composition ----------
+function sceneEnd(lt, t) {
+  arcs(250, 380, 170, 2, '232,207,148', 40, 6);
+  hourglass(1330, 770, 1.0, prog(lt, b(1.0), b(8.5)), easeOut(prog(lt, b(0.8), b(1.4)))); tagIn(1620, 770, '最早 2027？· 据报道', prog(lt, b(1.6), b(2.0)), 30, 380, [191, 203, 224]);
+  const k1 = easeBack(prog(lt, b(0.6), b(1.2))), k2 = easeBack(prog(lt, b(1.8), b(2.4)));
+  ctx.save(); ctx.translate(770, 470); ctx.scale(clamp(k1, 0, 1.05), clamp(k1, 0, 1.05)); ctx.globalAlpha *= clamp(k1 * 2); text('一口响了', 0, 0, { size: 136, family: F.serif, weight: 900, color: C.goldHi }); ctx.restore();
+  ctx.save(); ctx.translate(770, 640); ctx.scale(clamp(k2, 0, 1.05), clamp(k2, 0, 1.05)); ctx.globalAlpha *= clamp(k2 * 2); text('一口还蒙着布', 0, 0, { size: 104, family: F.serif, weight: 900, color: SILV }); ctx.restore();
+  text('价格与日期，以公司公告为准', 770, 730, { size: 36, color: C.gray, alpha: prog(lt, b(3.0), b(3.6)) });
+}
+
+// =====================================================================
+//  HOOK STORYBOARD — the first 5 seconds of 「两口钟」: the bell swings INTO the lens, cracks the screen,
+//  the camera whips back, a price tag slams on, and the spotlight turns to the covered bell.
+// =====================================================================
+function subT(zh, en) { text(zh, W / 2, 948, { size: 46, weight: 700, spacing: 2 }); text(en, W / 2, 996, { size: 28, family: F.en, italic: true, color: C.gray, alpha: 0.95 }); }
+function speedLines(cx, cy, r0, r1, n, col, seed = 5) { const r = mulberry32(seed); ctx.save(); ctx.lineCap = 'round'; for (let i = 0; i < n; i++) { const an = r() * 6.283, a = r0 + r() * (r1 - r0) * 0.5, l = 120 + r() * 420; ctx.strokeStyle = `rgba(${col},${0.15 + r() * 0.45})`; ctx.lineWidth = 2 + r() * 5; ctx.beginPath(); ctx.moveTo(cx + Math.cos(an) * a, cy + Math.sin(an) * a); ctx.lineTo(cx + Math.cos(an) * (a + l), cy + Math.sin(an) * (a + l)); ctx.stroke(); } ctx.restore(); }
+function cracks(cx, cy, seed = 9) {
+  const r = mulberry32(seed); ctx.save(); ctx.strokeStyle = 'rgba(255,250,235,0.95)'; ctx.lineJoin = 'miter'; ctx.shadowColor = 'rgba(255,240,200,0.9)'; ctx.shadowBlur = 14;
+  const rays = []; for (let i = 0; i < 15; i++) { const an = i / 15 * 6.283 + (r() - 0.5) * 0.3, pts = [[cx, cy]]; let d = 0; while (d < 1500) { d += 70 + r() * 150; const a2 = an + (r() - 0.5) * 0.28; pts.push([cx + Math.cos(a2) * d, cy + Math.sin(a2) * d]); } rays.push(pts); ctx.lineWidth = 5 - (i % 3); ctx.beginPath(); pts.forEach(([x, y], j) => j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
+  ctx.lineWidth = 2.5; [2, 4, 6].forEach(k => { ctx.beginPath(); rays.forEach((p, i) => { const q = p[Math.min(k, p.length - 1)]; i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath(); ctx.stroke(); });
+  ctx.restore();
+}
+function titleBlock(x, a = 1) {
+  const g = ctx.createLinearGradient(x - 320, 0, x + 320, 0); g.addColorStop(0, '#C9A96A'); g.addColorStop(0.5, '#FFF0C8'); g.addColorStop(1, '#C9A96A');
+  ctx.save(); ctx.globalAlpha *= a; ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 30; ctx.font = `900 54px ${F.serif}`; ctx.fillText('Anthropic vs OpenAI', x, 330); ctx.font = `900 210px ${F.serif}`; ctx.fillText('两口钟', x, 560); ctx.restore();
+  text('一口先响，一口还蒙着布', x, 660, { size: 46, weight: 700, spacing: 6, alpha: a });
+}
+const HOOK = [
+  ['0.0 秒 · 第 0 帧', () => {
+    speedLines(1250, 420, 520, 900, 70, '232,207,148');
+    bell2(1250, -150, 4.0, { glow: 1, swing: -0.1, clap: 0.9 });
+    titleBlock(400);
+    text('钟，朝镜头撞过来（第 0 帧标题完整）', 400, 760, { size: 28, color: C.gray });
+  }],
+  ['0.4 秒 · 撞上镜头', () => {
+    bell2(1130, -470, 5.4, { glow: 1, swing: 0.06, clap: -1 });
+    ctx.fillStyle = 'rgba(255,240,210,0.30)'; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 4; i++) { ctx.strokeStyle = `rgba(255,240,200,${0.7 - i * 0.15})`; ctx.lineWidth = 12 - i * 2.5; ctx.beginPath(); ctx.arc(1130, 830, 160 + i * 190, 0, 6.283); ctx.stroke(); }
+    cracks(1130, 830); ctx.save(); const tg = ctx.createRadialGradient(400, 480, 60, 400, 480, 520); tg.addColorStop(0, 'rgba(0,0,0,0.78)'); tg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = tg; ctx.fillRect(0, 100, 950, 760); ctx.restore(); titleBlock(400);
+    text('“咚”——屏幕裂开、白闪、震屏', 400, 760, { size: 28, color: C.gray });
+  }],
+  ['1.2 秒 · 镜头急速拉远', () => {
+    ctx.save(); const r = mulberry32(3); for (let i = 0; i < 46; i++) { const y = 130 + r() * 740, x = r() * 1500, l = 160 + r() * 420; ctx.strokeStyle = `rgba(232,207,148,${0.1 + r() * 0.3})`; ctx.lineWidth = 2 + r() * 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + l, y); ctx.stroke(); } ctx.restore();
+    beam(); rope(520, 150, 190); [0.85, 0.68].forEach((sw, i) => bell2(520, 250, 1.4, { swing: sw, a: 0.16 + i * 0.12 }));
+    bell2(520, 250, 1.4, { swing: 0.5, glow: 1, clap: 1 }); arcs(760, 520, 240, 4);
+    rope(1420, 150, 190, '#A9B8D2'); bell2(1420, 250, 1.4, { kind: 'silver', swing: -0.16 }); cloth(1420, 250, 1.4, -0.5, 1.08);
+    subT('一口钟，先响了', 'One bell rings first.');
+  }],
+  ['2.3 秒 · 价签砸下', () => {
+    beam(); hung(560, 215, 1.9, { glow: 0.8, swing: 0.05 }); hung(1700, 250, 0.9, { kind: 'silver', covered: true });
+    ctx.save(); ctx.strokeStyle = '#C9A96A'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(560, 150); ctx.quadraticCurveTo(760, 250, 880, 400); ctx.stroke(); ctx.restore();
+    burst(1180, 470, 0.14, 1.7);
+    ctx.save(); ctx.translate(1190, 480); ctx.rotate(-0.07); ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+    ctx.beginPath(); ctx.moveTo(-330, 0); ctx.lineTo(-250, -150); ctx.lineTo(340, -150); ctx.lineTo(340, 150); ctx.lineTo(-250, 150); ctx.closePath(); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#0e0e0e'; ctx.beginPath(); ctx.arc(-270, 0, 20, 0, 6.283); ctx.fill();
+    text('≈1.3 万亿', 50, 20, { size: 100, family: F.serif, weight: 900, color: '#2a2118' }); text('美元 · 上市估值 · 据报道', 60, 96, { size: 36, weight: 700, color: '#6b5a40' }); ctx.restore();
+    subT('这口钟，要顶着约 1.3 万亿美元的估值敲响', 'This bell is set to ring at about $1.3 trillion (reported).');
+  }],
+  ['3.6 秒 · 聚光灯转向另一口', () => {
+    beam(); hung(150, 250, 0.7, { glow: 0.3 });
+    ctx.fillStyle = 'rgba(0,0,0,0.68)'; ctx.fillRect(0, 0, W, 905);
+    ctx.save(); const g = ctx.createLinearGradient(0, 100, 0, 880); g.addColorStop(0, 'rgba(220,230,250,0.34)'); g.addColorStop(1, 'rgba(220,230,250,0.02)'); ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(1290, 60); ctx.lineTo(1410, 60); ctx.lineTo(1830, 900); ctx.lineTo(870, 900); ctx.closePath(); ctx.fill(); ctx.restore();
+    rope(1350, 150, 160, '#A9B8D2'); bell2(1350, 230, 2.0, { kind: 'silver', covered: true, swing: 0.03 });
+    ctx.save(); ctx.shadowColor = 'rgba(255,255,255,0.9)'; ctx.shadowBlur = 40; text('？', 1350, 520, { size: 260, family: F.serif, weight: 900, color: '#ffffff' }); ctx.restore();
+    text('另一口', 560, 440, { size: 150, family: F.serif, weight: 900, color: SILV }); text('为什么还蒙着布？', 560, 580, { size: 84, family: F.serif, weight: 900, color: C.text });
+    subT('另一口钟，为什么还蒙着布？', 'And why is the other one still under wraps?');
+  }],
+  ['4.6 秒 · 倒回 6 月，接正片', () => {
+    ctx.save(); const r = mulberry32(8); for (let i = 0; i < 30; i++) { const y = 120 + r() * 760; ctx.fillStyle = `rgba(234,234,242,${0.04 + r() * 0.1})`; ctx.fillRect(0, y, W, 2 + r() * 5); } ctx.restore();
+    beam(); hung(500, 250, 1.4, { glow: 0.2 }); cloth(500, 130, 1.4, 0.03, 1, 0.95); hung(1420, 250, 1.4, { kind: 'silver', covered: true });
+    text('◀◀', 960, 440, { size: 150, weight: 700, color: C.goldHi }); text('6 月', 960, 600, { size: 150, family: F.serif, weight: 900, color: C.text });
+    subT('倒回 6 月：两口钟，都蒙着布（OpenAI 为据报道）', 'Rewind to June: both bells were under wraps (OpenAI: reported).');
+  }]];
+function drawFrame(i) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; background(i * 3.1, i); dust(i * 2.3, 0.45);
+  HOOK[i][1](); finish(1, i);
+  text('开场 ' + (i + 1) + '/' + HOOK.length + ' · ' + HOOK[i][0], 1860, 74, { size: 24, align: 'right', color: C.gray });
+}
+window.ALL_TEXT = document.documentElement.innerHTML;
+window.ready = (async () => {
+  const sample = window.ALL_TEXT;
+  await Promise.all([document.fonts.load(`900 92px ${F.serif}`, sample), document.fonts.load(`400 40px ${F.sans}`, sample), document.fonts.load(`700 40px ${F.sans}`, sample), document.fonts.load(`italic 400 30px ${F.en}`, sample)]);
+  await document.fonts.ready; return HOOK.length;
+})();
+window.drawFrame = drawFrame;
+</script>
+</body>
+</html>
