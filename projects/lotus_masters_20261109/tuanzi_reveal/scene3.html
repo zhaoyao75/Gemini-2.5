@@ -101,16 +101,18 @@ st.innerHTML=sg;cam.insertBefore(st,$('sh'));
 let dd='';for(let y=40;y<1920;y+=120)for(let x=(y/120%2)*60+30;x<1080;x+=120)dd+=`<circle cx="${x}" cy="${y}" r="9"/>`;$('sdots').innerHTML=dd;
 cam.insertAdjacentHTML('beforeend',`<g id="wallart" transform="translate(540 585)"><path d="M-250 -490 L0 -640 L250 -490" fill="none" stroke="#3b2040" stroke-width="4"/><circle cx="0" cy="-640" r="9" fill="#e6c86e" stroke="#3b2040" stroke-width="4"/>
  <rect x="-378" y="-494" width="756" height="989" rx="22" fill="#e6c86e" stroke="#3b2040" stroke-width="8"/><rect x="-360" y="-476" width="720" height="953" rx="10" fill="#fff3dc" stroke="#3b2040" stroke-width="5"/><image href="p/lichtenstein.jpg" x="-350" y="-466" width="700" height="933"/></g>
- <g id="boxBack" display="none"><g transform="translate(-70 0)"><path d="M690 1560 L1030 1560 L1056 1480 L720 1480 Z" fill="#b98a55" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/></g></g>
- <g id="boxFront" display="none"><g transform="translate(-70 0)"><path d="M690 1600 L1030 1600 L1030 1840 L690 1840 Z" fill="#d6a56b" stroke="#3b2040" stroke-width="8" stroke-linejoin="round"/><rect x="822" y="1600" width="76" height="240" fill="#ecc98f" opacity=".8"/><rect x="930" y="1700" width="70" height="46" rx="5" fill="#fff3dc" stroke="#3b2040" stroke-width="4"/><path d="M940 1716 h50 M940 1732 h36" stroke="#3b2040" stroke-width="4"/><path d="M690 1600 L650 1555 L720 1535 L735 1600 Z" fill="#e0b57a" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/><path d="M1030 1600 L1072 1556 L1004 1535 L988 1600 Z" fill="#e0b57a" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/></g></g>`);
+ <g id="boxBack" display="none"><g transform="translate(-70 0)"><path d="M690 1560 L1030 1560 L1056 1480 L720 1480 Z" fill="#b98a55" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/><path d="M690 1590 L650 1555 L720 1535 L735 1590 Z" fill="#e0b57a" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/><path d="M1030 1590 L1072 1556 L1004 1535 L988 1590 Z" fill="#e0b57a" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/></g></g>
+ <g id="boxFront" display="none"><g transform="translate(-70 0)"><path d="M690 1600 L1030 1600 L1030 1840 L690 1840 Z" fill="#d6a56b" stroke="#3b2040" stroke-width="8" stroke-linejoin="round"/><rect x="822" y="1600" width="76" height="240" fill="#ecc98f" opacity=".8"/><rect x="930" y="1700" width="70" height="46" rx="5" fill="#fff3dc" stroke="#3b2040" stroke-width="4"/><path d="M940 1716 h50 M940 1732 h36" stroke="#3b2040" stroke-width="4"/></g></g>`);
+cam.insertBefore($('boxBack'),$('sh'));
 $('hud').innerHTML=`<g id="sub"></g><g id="end" display="none"><rect width="1080" height="1920" fill="#3b2040" opacity=".55"/><g id="endCard"><rect x="90" y="150" width="900" height="1620" rx="46" fill="#fff3dc" stroke="#3b2040" stroke-width="10"/>
  <rect x="300" y="205" width="480" height="76" rx="38" fill="#ffd566" stroke="#3b2040" stroke-width="6"/><text x="540" y="258" text-anchor="middle" font-size="42" fill="#3b2040">团子猫日常 · 特别篇</text>
  <text x="540" y="372" text-anchor="middle" font-size="66" fill="#b8231f">看不懂?其实都是荷花</text>
  <text x="540" y="470" text-anchor="middle" font-size="92" fill="#3b2040">谁是你的最爱?😍</text><g id="grid"></g></g></g>`;
 let g='';const GW=224,GH=299,GX=14,GY=14,gx0=540-(3*GW+2*GX)/2,gy0=510;N12.forEach((n,i)=>{const c=i%3,r=(i/3)|0,x=gx0+c*(GW+GX),y=gy0+r*(GH+GY);g+=`<image href="p/${n}.jpg" x="${x}" y="${y}" width="${GW}" height="${GH}"/><rect x="${x}" y="${y}" width="${GW}" height="${GH}" fill="none" stroke="#3b2040" stroke-width="5"/><rect x="${x+8}" y="${y+GH-54}" width="${Z12[i].length*34+26}" height="44" rx="10" fill="#fff3dc" stroke="#3b2040" stroke-width="3"/><text x="${x+21}" y="${y+GH-22}" font-size="32" fill="#3b2040">${Z12[i]}</text>`;});$('grid').innerHTML=g;
+$('hud').appendChild($('sub2'));
 const subtxt=(el,txt,u,x,y,sz,fill)=>{$(el).innerHTML=u>0?`<g transform="translate(${x} ${y}) scale(${0.7+0.3*u})"><text text-anchor="middle" font-size="${sz||104}" fill="${fill||'#fff3dc'}" stroke="#3b2040" stroke-width="20" stroke-linejoin="round" paint-order="stroke" opacity="${u}">${txt}</text></g>`:'';};
 function R(t){
- const o={x:240,y:1885,rot:0,sx:1.5,sy:1.5,shy:3000,shs:0,tail:5*Math.sin(t*2.3),eye:'half',mouth:'n',dx:0,dy:-8,blush:.5,phi:0,pw:0};
+ const o={x:210,y:1885,rot:0,sx:1.5,sy:1.5,shy:3000,shs:0,tail:5*Math.sin(t*2.3),eye:'half',mouth:'n',dx:0,dy:-8,blush:.5,phi:0,pw:0};
  o.sy*=1+0.012*Math.sin(t*5);
  const inStage=t<T_BOX;
  $('stage').setAttribute('display',inStage?'inline':'none');$('wallart').setAttribute('display',inStage?'none':'inline');
@@ -133,9 +135,9 @@ function R(t){
  // labels and subtitles
  if(inStage){
   $('lab').innerHTML=`<rect x="190" y="30" width="700" height="64" rx="32" fill="#ffd566" stroke="#3b2040" stroke-width="6"/><text x="540" y="76" text-anchor="middle" font-size="38" fill="#3b2040">${LABELS[k]}</text>`;
-  if(t<T_B)subtxt('sub2','看不懂。',ease((t-0.12)/0.1),800,1740,88);
-  else if(t<T_C){ if(t<T_B+T_WIPE+0.05)$('sub2').innerHTML='';else subtxt('sub2','……是荷花?',ease((t-T_B-T_WIPE-0.05)/0.1),800,1740,88,'#ffe04a');}
-  else subtxt('sub2',SUBC[k-1],ease((uC-0.12)/0.1),800,1740,88);
+  if(t<T_B)subtxt('sub2','看不懂。',ease((t-0.12)/0.1),810,1740,84);
+  else if(t<T_C){ if(t<T_B+T_WIPE+0.05)$('sub2').innerHTML='';else subtxt('sub2','……是荷花?',ease((t-T_B-T_WIPE-0.05)/0.1),810,1740,84,'#ffe04a');}
+  else subtxt('sub2',SUBC[k-1],ease((uC-0.12)/0.1),810,1740,84);
   // cat reactions
   o.sx=o.sy=1.5;
   if(t<T_B){o.eye='half';o.mouth='n';o.rot=-2+1.5*Math.sin(t*3);}
@@ -149,8 +151,8 @@ function R(t){
  if(inBox){
    const u=t-T_BOX;o.shy=1752;o.shs=1.9;
    if(u<0.75){const w=u/0.75;o.x=L(240,540,sm(w));o.y=1752;o.sx=o.sy=1.35;o.pw=1;o.phi=t*2.6;o.eye='half';o.mouth='n';o.dy=-8;}
-   else if(u<1.15){const j=(u-0.75)/0.4;o.x=L(540,790,sm(j));o.y=1752-190*Math.sin(Math.PI*j)+(j>0.7?(j-0.7)/0.3*34:0);o.sx=o.sy=1.35-0.05*j;o.eye='dot';o.mouth='o';o.pw=0;}
-   else{const v=u-1.15;o.x=790;o.y=1786-34*(1-Math.exp(-v*10))*0+0;o.y=1786+(v<0.25?-14*Math.sin(Math.PI*v/0.25):0);o.sx=o.sy=1.3;o.eye='c';o.mouth='n';o.blush=.95;}
+   else if(u<1.15){const j=(u-0.75)/0.4;o.x=L(540,790,sm(j));o.y=L(1752,1610,j*j)-210*Math.sin(Math.PI*j);o.sx=o.sy=L(1.35,0.8,sm(j));o.eye='dot';o.mouth='o';o.pw=0;o.shs=1.9*(1-0.8*j);}
+   else{const v=u-1.15;o.x=790;o.y=1610+(v<0.3?-22*Math.sin(Math.PI*v/0.3):0);o.sx=0.8;o.sy=0.8*(v<0.3?1+0.1*Math.sin(Math.PI*v/0.3):1);o.eye='c';o.mouth='n';o.blush=.95;o.shs=0;o.shy=3000;}
    subtxt('sub','最爱:纸箱',ease((u-1.3)/0.1),540,1165);
  }
  drawCat(o);
