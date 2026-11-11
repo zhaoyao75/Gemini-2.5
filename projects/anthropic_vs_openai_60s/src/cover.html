@@ -68,6 +68,12 @@ function silverCovered(x, y, sc) {
 }
 function beamC(x0, x1, y) { const g = ctx.createLinearGradient(0, y - 14, 0, y + 14); g.addColorStop(0, '#E8CF94'); g.addColorStop(1, '#7a5b28'); ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x0, y - 13, x1 - x0, 26, 13); ctx.fill(); }
 function ropeC(x, y0, y1, c) { ctx.strokeStyle = c; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke(); }
+function crackC(cx, cy, seed) {
+  let a = seed; const rnd = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  ctx.save(); ctx.translate(cx, cy); ctx.strokeStyle = 'rgba(255,248,225,0.9)'; ctx.shadowColor = 'rgba(255,240,200,0.9)'; ctx.shadowBlur = 12; ctx.lineJoin = 'miter';
+  const rays = []; for (let i = 0; i < 14; i++) { const an = i / 14 * 6.283 + (rnd() - 0.5) * 0.3, pts = [[0, 0]]; let d = 0; while (d < 900) { d += 60 + rnd() * 120; const a2 = an + (rnd() - 0.5) * 0.28; pts.push([Math.cos(a2) * d, Math.sin(a2) * d]); } rays.push(pts); ctx.lineWidth = 4 - (i % 3) * 0.8; ctx.beginPath(); pts.forEach(([x, y], j) => j ? ctx.lineTo(x, y) : ctx.moveTo(0, 0)); ctx.stroke(); }
+  ctx.lineWidth = 2; [2, 4].forEach(k => { ctx.beginPath(); rays.forEach((p, i) => { const q = p[Math.min(k, p.length - 1)]; i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath(); ctx.stroke(); }); ctx.restore();
+}
 function draw() {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
   if (!WIDE) {
@@ -75,7 +81,12 @@ function draw() {
     outlined('Anthropic vs OpenAI', 540, 215, 100, '#ffffff', '#000', 14, 'rgba(255,255,255,0.35)');
     outlined('两口钟', 540, 450, 220, '#fff200', '#000', 18, 'rgba(255,230,0,0.45)');
     pill(540, 540, 880, 104, 56, '一口先响，一口蒙着布');
-    beamC(40, 1040, 720); ropeC(270, 720, 790, '#C9A96A'); ropeC(810, 720, 790, '#A9B8D2'); bell(270, 830, 1.5); silverCovered(810, 830, 1.5);
+    crackC(540, 1060, 7); ctx.save(); ctx.globalAlpha = 0.9; silverCovered(840, 905, 1.0); ctx.restore();
+    bell(430, 850, 2.0);
+    ctx.save(); ctx.translate(790, 1230); ctx.rotate(-0.09); ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 36; ctx.shadowOffsetY = 12;
+    ctx.beginPath(); ctx.moveTo(-250, 0); ctx.lineTo(-190, -105); ctx.lineTo(250, -105); ctx.lineTo(250, 105); ctx.lineTo(-190, 105); ctx.closePath(); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(-205, 0, 15, 0, 6.283); ctx.fill();
+    ctx.font = `900 84px ${SANS}`; ctx.fillStyle = '#2a2118'; ctx.textAlign = 'center'; ctx.fillText('≈1.3万亿', 20, 22); ctx.font = `700 28px ${SANS}`; ctx.fillStyle = '#6b5a40'; ctx.fillText('美元 · 上市估值 · 据报道', 20, 70); ctx.restore();
     ctx.save(); ctx.font = `700 26px ${SANS}`; ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.textAlign = 'center'; ctx.fillText('@比特双子', 540, 1412); ctx.restore();
   } else {
     glow(1000, 700, 560, GOLDC, 0.32);
