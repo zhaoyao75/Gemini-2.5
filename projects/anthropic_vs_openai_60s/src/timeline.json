@@ -6,7 +6,8 @@
  "tail_seconds": 0.5,
  "scenes_beats": {
   "D_title": [0, 4],
-  "A_cover": [4, 14],
+  "H_hook": [4, 8],
+  "A_cover": [8, 14],
   "B_ruler": [14, 23],
   "C_size": [23, 30],
   "D_rope": [30, 38],

@@ -19,7 +19,7 @@ SC, TOTAL = TL["scenes_beats"], TL["total_beats"]
 SR, VBEAT = 44100, 60 / float(os.environ.get("VIDEO_BPM", TL["bpm"]))
 INTRO, TB = TL["intro_seconds"], SC["D_title"][1]
 def T(n): return n / TB * INTRO if n < TB else INTRO + (n - TB) * VBEAT
-A0 = SC["A_cover"][0]
+A0 = SC["D_title"][1]                     # music phrases still start at video beat 4 (1.0 s)
 DROP = SC["E_ring"][0]                      # video beat 44 (the bell strike)
 BREAK0 = DROP - 2
 BUILD0 = DROP - 6
@@ -141,6 +141,7 @@ add("drums", tom(88, 0.7), 0.0, gain=0.10)             # first second: same leve
 for i in range(6): add("arp", spic(OST["Dm"][i], 0.7 + 0.06 * i), i / 6, pan=-0.1, gain=0.16)
 add("bass", sub808(38, 1.0), 0, gain=0.35); add("bass", sub808(38, 0.4), 0.5, gain=0.2)
 add("lead", cello(62, 0.5, 1.0), 0.0, gain=1.8); add("lead", cello(70, 0.9, 1.0), 0.5, gain=1.8)
+add("keys", bell(62, 2.2, 1.0), 0.4, pan=0.0, gain=0.3)       # the one bell stroke on the screen-crack (0.4 s): a bell, not a drum, at the same level as what follows
 
 # ---------- the arrangement, bar by bar ----------
 bar = A0

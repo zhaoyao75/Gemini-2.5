@@ -456,18 +456,19 @@ function kf(nb, arr) {                                  // [[beat, ...values]] -
   return arr[arr.length - 1].slice(1);
 }
 function lin(nb, arr) { for (let i = 1; i < arr.length; i++) if (nb <= arr[i][0]) return lerp(arr[i - 1][1], arr[i][1], prog(nb, arr[i - 1][0], arr[i][0])); return arr[arr.length - 1][1]; }
-const GK = [[0, 230, 250, 1.15], [3.6, 230, 250, 1.15], [4.8, 500, 250, 1.4], [14, 500, 250, 1.4], [15.5, 470, 250, 1.3], [23, 470, 250, 1.3], [24.3, 600, 215, 1.35], [25.8, 600, 215, 1.65], [27.2, 600, 215, 2.0], [30, 600, 215, 2.0],
+const GK = [[8, 500, 250, 1.4], [14, 500, 250, 1.4], [15.5, 470, 250, 1.3], [23, 470, 250, 1.3], [24.3, 600, 215, 1.35], [25.8, 600, 215, 1.65], [27.2, 600, 215, 2.0], [30, 600, 215, 2.0],
   [31.4, 430, 280, 1.3], [43, 430, 280, 1.3], [44, 960, 190, 2.0], [50, 960, 190, 2.0], [51.6, 330, 250, 1.3], [57, 330, 250, 1.3], [58.4, 250, 240, 0.95], [66, 250, 240, 0.95]];
-const SK = [[0, 1690, 250, 1.15], [3.6, 1690, 250, 1.15], [4.8, 1420, 250, 1.4], [14, 1420, 250, 1.4], [15.5, 1450, 250, 1.3], [23, 1450, 250, 1.3], [24.5, 1690, 250, 0.95], [30, 1690, 250, 0.95],
+const SK = [[8, 1420, 250, 1.4], [14, 1420, 250, 1.4], [15.5, 1450, 250, 1.3], [23, 1450, 250, 1.3], [24.5, 1690, 250, 0.95], [30, 1690, 250, 0.95],
   [31.4, 1850, 250, 0.6], [43, 1850, 250, 0.6], [44, 1730, 240, 0.72], [50, 1730, 240, 0.72], [51.6, 1790, 250, 0.9], [57, 1790, 250, 0.9], [58.4, 1560, 250, 1.4], [66, 1560, 250, 1.4]];
-const GGLOW = [[0, 0.7], [4, 0.7], [4.8, 0.1], [7.6, 0.1], [8.4, 0.8], [11, 0.6], [14, 0.4], [23, 0.4], [25, 0.7], [28, 0.7], [30, 0.3], [38, 0.3], [43.9, 1], [50, 0.8], [51.5, 0.3], [57, 0.3], [58, 0.7], [66, 0.7]];
-const YANK = [7.6, 8.6], DROP_C = [4.1, 4.8];
+const GGLOW = [[8, 0.1], [10.3, 0.1], [11.2, 0.8], [12.5, 0.6], [14, 0.4], [23, 0.4], [25, 0.7], [28, 0.7], [30, 0.3], [38, 0.3], [43.9, 1], [50, 0.8], [51.5, 0.3], [57, 0.3], [58, 0.7], [66, 0.7]];
+const YANK = [10.3, 11.2], DROP_C = [8, 8.1];
 function bellsLayer(t) {
+  if (t < T(8)) return;
   const nb = beatOf(t), g = kf(nb, GK), sv = kf(nb, SK), tr = T(44);
   const a = Math.max(0, t - tr), yk = Math.max(0, t - T(YANK[0] + 0.5));
   let swing = 0.03 * Math.sin(t * 3), clap = 0, mood = nb >= 51 && nb < 57 ? 0 : 1;
   if (nb < 4) { swing = 0.1 * Math.sin(t * 6); clap = 0.6 * Math.sin(t * 6); }
-  if (nb >= 8 && nb < 14) swing = 0.2 * Math.exp(-3 * yk) * Math.sin(8 * yk) + 0.03 * Math.sin(t * 3);
+  if (nb >= YANK[0] && nb < 14) swing = 0.2 * Math.exp(-3 * yk) * Math.sin(8 * yk) + 0.03 * Math.sin(t * 3);
   if (nb >= 43 && nb < 44) swing = 0.05 * Math.sin(t * 40) * prog(nb, 43, 44);
   if (nb >= 44 && nb < 51) { swing = 0.30 * Math.exp(-1.3 * a) * Math.sin(7 * a); clap = -Math.sin(7 * a) * Math.exp(-1.3 * a); }
   const dy = nb >= 30 && nb < 38 ? 10 * Math.pow(Math.sin(t * 5), 2) : 0;
@@ -478,7 +479,7 @@ function bellsLayer(t) {
   const glow = lin(nb, GGLOW) + (nb >= 44 && nb < 51 ? 0.4 * pulseAt(t, tr + 0.05, 0.4) : 0);
   bell2(g[0], g[1] + dy, g[2], { kind: 'gold', swing, clap, mood, glow: clamp(glow, 0, 1) });
   const gs = nb >= DROP_C[0] && nb < YANK[0];
-  if (nb >= DROP_C[0] && nb < YANK[0] + 0.0001) { const k = prog(nb, DROP_C[0], DROP_C[1]); cloth(g[0], g[1] - (1 - easeIn2(k)) * 800, g[2], 0.02 * Math.sin(t * 2), 1, 1); }
+  if (nb >= 8 && nb < YANK[0]) cloth(g[0], g[1], g[2], 0, 1, 1);
   else if (nb >= YANK[0] && nb < YANK[1]) {
     const k = easeIO(prog(nb, YANK[0], YANK[1])); cloth(lerp(500, 190, k), lerp(250, 690, k) - 140 * Math.sin(Math.PI * k), lerp(1.4, 1.0, k), -0.5 * k - 0.8 * Math.sin(Math.PI * k), lerp(1, 0.6, k), 1);
   } else if (nb >= YANK[1] && nb < 31) cloth(190, 690, 1.0, -0.5, 0.6, 1 - prog(nb, 29, 31));
@@ -491,30 +492,14 @@ function bellsLayer(t) {
 }
 const tagIn = (x, y, str, k, size, w, col) => { if (k <= 0) return; ctx.save(); ctx.translate(-(1 - easeOut(clamp(k))) * 260, 0); tagCard(x, y, str, clamp(k * 3), size, w, col); ctx.restore(); };
 
-// ---------- title ----------
-function sceneTitleCard(t) {
-  const [, d1] = S.D_title, kout = easeIO(prog(t, d1 - 0.3, d1 + 0.1));
-  if (kout >= 1) return;
-  const slam = easeOut(prog(t, 0, 0.28)), sc = lerp(1.18, 1, slam) * lerp(1, 0.92, kout);
-  arcs(230, 440, 200, 2);
-  ctx.save(); ctx.globalAlpha = 1 - kout; ctx.translate(W / 2, 0); ctx.scale(sc, sc); ctx.translate(-W / 2, 0);
-  const g = ctx.createLinearGradient(600, 0, 1320, 0), sw = clamp(t / 0.8);
-  g.addColorStop(0, '#B8935A'); g.addColorStop(clamp(sw - 0.12), '#C9A96A'); g.addColorStop(sw, '#FFF0C8'); g.addColorStop(clamp(sw + 0.12), '#C9A96A'); g.addColorStop(1, '#B8935A');
-  ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(232,207,148,0.45)'; ctx.shadowBlur = 36;
-  ctx.font = `900 64px ${F.serif}`; ctx.fillText('Anthropic vs OpenAI', 960, 380); ctx.font = `900 240px ${F.serif}`; ctx.fillText('两口钟', 960, 630); ctx.shadowBlur = 0;
-  text('一口先响，一口还蒙着布', 960, 750, { size: 60, weight: 700, spacing: 8 }); text('Two bells: one rings first, one is still under wraps', 960, 806, { size: 30, family: F.en, italic: true, color: C.gray });
-  ctx.restore();
-  const flash = Math.exp(-t / 0.09) * 0.55; if (flash > 0.01) { ctx.fillStyle = `rgba(255,240,210,${flash})`; ctx.fillRect(0, 0, W, H); }
-}
-
 // ---------- ① the cover comes off ----------
 function sceneCover(lt, t) {
-  const tg = [['6月1日 · 保密递交', 340, 1.0, [150, 156, 170]], ['10月26日 · 文件公开', 440, 3.6, [232, 207, 148]], ['11月10日 · 启动路演', 540, 6.7, [232, 207, 148]]];
+  const tg = [['6月1日 · 保密递交', 340, 0.6, [150, 156, 170]], ['10月26日 · 文件公开', 440, 2.2, [232, 207, 148]], ['11月10日 · 启动路演', 540, 4.2, [232, 207, 148]]];
   tg.forEach(([s2, y, at, col]) => tagIn(960, y, s2, prog(lt, b(at), b(at) + 0.45), 34, 440, col));
-  const ky = prog(lt, b(3.6), b(3.6) + 0.5); text('Anthropic', 500, 668, { size: 32, weight: 700, color: C.goldHi, alpha: prog(lt, b(0.6), b(1.2)) }); text('OpenAI', 1420, 668, { size: 32, weight: 700, color: SILV, alpha: prog(lt, b(0.6), b(1.2)) });
-  if (ky > 0) { text('布，掀开了', 560, 790, { size: 64, family: F.serif, weight: 900, color: C.goldHi, alpha: clamp(ky * 2) }); }
-  burst(500, 300, lt - b(4.0), 1.2);
-  const ks = prog(lt, b(7.3), b(7.3) + 0.4); stamp2(1420, 760, -0.06, 330, '未公开', 64, ks, SILVC); tagIn(1420, 858, '最早 2027？· 据报道', prog(lt, b(8.0), b(8.4)), 32, 420, [191, 203, 224]);
+  text('Anthropic', 500, 668, { size: 32, weight: 700, color: C.goldHi, alpha: prog(lt, b(0.3), b(0.8)) }); text('OpenAI', 1420, 668, { size: 32, weight: 700, color: SILV, alpha: prog(lt, b(0.3), b(0.8)) });
+  const ky = prog(lt, b(2.4), b(2.4) + 0.5); if (ky > 0) text('布，掀开了', 560, 790, { size: 64, family: F.serif, weight: 900, color: C.goldHi, alpha: clamp(ky * 2) });
+  burst(500, 300, lt - b(2.3), 1.2);
+  const ks = prog(lt, b(4.7), b(4.7) + 0.4); stamp2(1420, 760, -0.06, 330, '未公开', 64, ks, SILVC); tagIn(1420, 858, '最早 2027？· 据报道', prog(lt, b(5.2), b(5.6)), 32, 420, [191, 203, 224]);
 }
 
 // ---------- ② two rulers ----------
@@ -604,12 +589,95 @@ function sceneEnd(lt, t) {
   text('价格与日期，以公司公告为准', 770, 730, { size: 36, color: C.gray, alpha: prog(lt, b(3.0), b(3.6)) });
 }
 
+// ---------- the opening 4.6 s: the bell swings into the lens, cracks the screen, the camera whips back, a price tag slams on, the spotlight turns to the covered bell ----------
+function speedLines(cx, cy, r0, r1, n, col, seed, al = 1) { const r = mulberry32(seed); ctx.save(); ctx.lineCap = 'round'; for (let i = 0; i < n; i++) { const an = r() * 6.283, a = r0 + r() * (r1 - r0) * 0.5, l = 120 + r() * 420; ctx.strokeStyle = `rgba(${col},${(0.15 + r() * 0.45) * al})`; ctx.lineWidth = 2 + r() * 5; ctx.beginPath(); ctx.moveTo(cx + Math.cos(an) * a, cy + Math.sin(an) * a); ctx.lineTo(cx + Math.cos(an) * (a + l), cy + Math.sin(an) * (a + l)); ctx.stroke(); } ctx.restore(); }
+const CRACKS = (() => { const r = mulberry32(9), rays = []; for (let i = 0; i < 15; i++) { const an = i / 15 * 6.283 + (r() - 0.5) * 0.3, pts = [[0, 0]]; let d = 0; while (d < 1500) { d += 70 + r() * 150; const a2 = an + (r() - 0.5) * 0.28; pts.push([Math.cos(a2) * d, Math.sin(a2) * d]); } rays.push(pts); } return rays; })();
+function cracks(cx, cy, grow, al) {
+  ctx.save(); ctx.globalAlpha *= al; ctx.translate(cx, cy); ctx.strokeStyle = 'rgba(255,250,235,0.95)'; ctx.shadowColor = 'rgba(255,240,200,0.9)'; ctx.shadowBlur = 14;
+  CRACKS.forEach((p, i) => { ctx.lineWidth = 5 - (i % 3); ctx.beginPath(); const n = Math.max(1, Math.floor(p.length * grow)); for (let j = 0; j < n; j++) j ? ctx.lineTo(p[j][0], p[j][1]) : ctx.moveTo(0, 0); ctx.stroke(); });
+  ctx.lineWidth = 2.5; [2, 4, 6].forEach(k => { if (k > CRACKS[0].length * grow) return; ctx.beginPath(); CRACKS.forEach((p, i) => { const q = p[Math.min(k, p.length - 1)]; i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.closePath(); ctx.stroke(); });
+  ctx.restore();
+}
+function titleBlock(x, a) {
+  if (a <= 0) return; const g = ctx.createLinearGradient(x - 320, 0, x + 320, 0); g.addColorStop(0, '#C9A96A'); g.addColorStop(0.5, '#FFF0C8'); g.addColorStop(1, '#C9A96A');
+  ctx.save(); ctx.globalAlpha *= a; ctx.textAlign = 'center'; ctx.fillStyle = g; ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 30; ctx.font = `900 54px ${F.serif}`; ctx.fillText('Anthropic vs OpenAI', x, 330); ctx.font = `900 210px ${F.serif}`; ctx.fillText('两口钟', x, 560); ctx.restore();
+  text('一口先响，一口还蒙着布', x, 660, { size: 46, weight: 700, spacing: 6, alpha: a }); text('Two bells: one rings first, one is still under wraps', x, 712, { size: 26, family: F.en, italic: true, color: C.gray, alpha: a });
+}
+const HG = [[1.2, 520, 250, 1.4], [2.0, 520, 250, 1.4], [2.4, 560, 215, 1.9], [3.4, 560, 215, 1.9], [3.9, 150, 250, 0.7], [4.2, 150, 250, 0.7], [4.64, 500, 250, 1.4]];
+const HS = [[1.2, 1420, 250, 1.4], [2.0, 1420, 250, 1.4], [2.4, 1700, 250, 0.9], [3.4, 1700, 250, 0.9], [3.9, 1350, 230, 2.0], [4.2, 1350, 230, 2.0], [4.64, 1420, 250, 1.4]];
+function hookLayer(t) {
+  const T8 = T(8); if (t >= T8) return;
+  const sh = t > 0.4 && t < 1.0 ? 22 * Math.exp(-8 * (t - 0.4)) : 0;
+  ctx.save(); ctx.translate(sh * Math.sin(70 * (t - 0.4)), sh * Math.cos(63 * (t - 0.4)));
+  // --- P1/P2: the bell in the lens ---
+  if (t < 1.25) {
+    const p = easeIn2(clamp(t / 0.4)), fade = 1 - prog(t, 1.0, 1.25);
+    const bx = lerp(1250, 1130, p), by = lerp(-150, -470, p), bs = lerp(4.0, 5.4, p);
+    if (t < 0.4) speedLines(1250, 420, 520, 900, 70, '232,207,148', 5, 1 - p * 0.3);
+    bell2(bx, by + (t > 0.4 ? 14 * Math.sin(40 * (t - 0.4)) * Math.exp(-6 * (t - 0.4)) : 0), bs, { glow: 1, swing: t < 0.4 ? -0.1 * (1 - p) : 0.06 * Math.exp(-6 * (t - 0.4)) * Math.sin(30 * (t - 0.4)), clap: t < 0.4 ? 0.9 : -1, a: fade });
+    if (t >= 0.4) {
+      const a = t - 0.4; for (let i = 0; i < 4; i++) { const r = 160 + i * 190 + a * 500; ctx.strokeStyle = `rgba(255,240,200,${Math.max(0, 0.7 - i * 0.15 - a * 0.8)})`; ctx.lineWidth = 12 - i * 2.5; ctx.beginPath(); ctx.arc(1130, 830, r, 0, 6.283); ctx.stroke(); }
+      const tg = ctx.createRadialGradient(400, 480, 60, 400, 480, 520); tg.addColorStop(0, 'rgba(0,0,0,0.78)'); tg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = tg; ctx.fillRect(0, 100, 950, 760);
+    }
+  }
+  // --- P3..P6: the world (camera whips back) ---
+  if (t >= 1.1) {
+    const Z = lerp(3.4, 1, easeOut(prog(t, 1.05, 1.9))), wa = prog(t, 1.1, 1.3);
+    const g = kf(t, HG), sv = kf(t, HS), a0 = t - 1.2;
+    ctx.save(); ctx.globalAlpha *= wa; ctx.translate(700, 330); ctx.scale(Z, Z); ctx.translate(-700, -330);
+    if (t < 2.4) { const r = mulberry32(3); for (let i = 0; i < 46; i++) { const y = 130 + r() * 740, x = r() * 1500, l = 160 + r() * 420; ctx.strokeStyle = `rgba(232,207,148,${(0.1 + r() * 0.3) * (1 - prog(t, 1.6, 2.2))})`; ctx.lineWidth = 2 + r() * 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x - 600 * (1 - prog(t, 1.1, 1.9)), y); ctx.lineTo(x - 600 * (1 - prog(t, 1.1, 1.9)) + l, y); ctx.stroke(); } }
+    rope(g[0], 150, g[1] - 46 * g[2], '#C9A96A'); rope(sv[0], 150, sv[1] - 46 * sv[2], '#A9B8D2'); beam();
+    const swg = t < 2.4 ? 0.9 * Math.exp(-2.4 * a0) * Math.cos(9 * a0) : 0.05 * Math.sin(t * 3) * Math.exp(-(t - 2.4));
+    if (t < 2.4) [0.12, 0.07].forEach((lag, i) => bell2(g[0], g[1], g[2], { swing: 0.9 * Math.exp(-2.4 * (a0 - lag * 2)) * Math.cos(9 * (a0 - lag * 2)), a: 0.28 - i * 0.12 }));
+    bell2(g[0], g[1], g[2], { swing: swg, glow: t < 2.4 ? 1 : 0.8, clap: t < 2.4 ? Math.cos(9 * a0) : 0, mood: 1 });
+    if (t < 2.3) arcs(g[0] + 230, g[1] + 270, 240, 4);
+    bell2(sv[0], sv[1], sv[2], { kind: 'silver', swing: -0.02 }); const fl = t < 2.4 ? Math.exp(-1.4 * a0) : 0;
+    cloth(sv[0], sv[1], sv[2], -0.5 * fl + 0.02 * Math.sin(t * 2), 1 + 0.08 * fl * Math.abs(Math.sin(9 * a0)), 1);
+    // cloth falling back on the gold bell (rewind)
+    if (t >= 4.2) { const k = prog(t, 4.2, 4.55); cloth(g[0], g[1] - (1 - easeIn2(k)) * 800, g[2], 0, 1, 1); }
+    ctx.restore();
+    // cracks stay on the glass while the camera pulls away
+    cracks(1130, 830, easeOut(prog(t, 0.4, 0.55)), t >= 0.4 ? 1 - prog(t, 1.2, 1.9) : 0);
+  } else cracks(1130, 830, easeOut(prog(t, 0.4, 0.55)), t >= 0.4 ? 1 : 0);
+  // --- P4: the price tag ---
+  if (t >= 2.3 && t < 3.9) {
+    const k = prog(t, 2.3, 2.48), land = t - 2.48, drop = (1 - easeIn2(k)) * 700, sc = land > 0 && land < 0.3 ? 1 + 0.2 * Math.exp(-14 * land) : 1, out = prog(t, 3.5, 3.8);
+    ctx.save(); ctx.globalAlpha *= 1 - out; ctx.translate(land > 0 ? 6 * Math.exp(-8 * land) * Math.sin(60 * land) : 0, 0);
+    ctx.strokeStyle = '#C9A96A'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(560, 150); ctx.quadraticCurveTo(760, 250, 880, 400 - drop); ctx.stroke();
+    ctx.translate(1190, 480 - drop); ctx.rotate(-0.07 + 0.05 * Math.exp(-5 * Math.max(0, land)) * Math.sin(14 * Math.max(0, land))); ctx.scale(sc, sc);
+    ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
+    ctx.beginPath(); ctx.moveTo(-330, 0); ctx.lineTo(-250, -150); ctx.lineTo(340, -150); ctx.lineTo(340, 150); ctx.lineTo(-250, 150); ctx.closePath(); ctx.fillStyle = '#EDE4D3'; ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#0e0e0e'; ctx.beginPath(); ctx.arc(-270, 0, 20, 0, 6.283); ctx.fill();
+    text('≈1.3 万亿', 50, 20, { size: 100, family: F.serif, weight: 900, color: '#2a2118' }); text('美元 · 上市估值 · 据报道', 50, 96, { size: 36, weight: 700, color: '#6b5a40' }); ctx.restore();
+    if (land > 0) burst(1190, 470, land, 1.7);
+    if (land > 0 && land < 0.1) { ctx.fillStyle = `rgba(255,240,210,${0.35 * (1 - land / 0.1)})`; ctx.fillRect(0, 0, W, H); }
+  }
+  // --- P5: the spotlight turns to the covered bell ---
+  if (t >= 3.6 && t < 4.64) {
+    const k = easeOut(prog(t, 3.6, 3.85)), out = 1 - prog(t, 4.2, 4.5);
+    ctx.fillStyle = `rgba(0,0,0,${0.68 * k * out})`; ctx.fillRect(0, 0, W, 905);
+    ctx.save(); ctx.globalAlpha *= k * out; const gg = ctx.createLinearGradient(0, 100, 0, 880); gg.addColorStop(0, 'rgba(220,230,250,0.34)'); gg.addColorStop(1, 'rgba(220,230,250,0.02)'); ctx.fillStyle = gg; ctx.beginPath(); ctx.moveTo(1290, 60); ctx.lineTo(1410, 60); ctx.lineTo(1830, 900); ctx.lineTo(870, 900); ctx.closePath(); ctx.fill(); ctx.restore();
+    const kq = easeBack(prog(t, 3.9, 4.2)); ctx.save(); ctx.globalAlpha *= out; ctx.translate(1350, 520); ctx.scale(clamp(kq, 0, 1.1), clamp(kq, 0, 1.1)); ctx.shadowColor = 'rgba(255,255,255,0.9)'; ctx.shadowBlur = 40; text('？', 0, 0, { size: 260, family: F.serif, weight: 900, color: '#ffffff', alpha: clamp(kq * 2) }); ctx.restore();
+    const kx = easeOut(prog(t, 3.8, 4.1)); ctx.save(); ctx.globalAlpha *= out; ctx.translate(-(1 - kx) * 300, 0); text('另一口', 560, 440, { size: 150, family: F.serif, weight: 900, color: SILV, alpha: kx }); text('为什么还蒙着布？', 560, 580, { size: 84, family: F.serif, weight: 900, color: C.text, alpha: kx }); ctx.restore();
+  }
+  // --- title block (frame 0 is complete) ---
+  titleBlock(400, 1 - prog(t, 1.0, 1.4));
+  ctx.restore();
+  // white flash on impact
+  if (t >= 0.4 && t < 0.9) { ctx.fillStyle = `rgba(255,240,210,${0.5 * Math.exp(-9 * (t - 0.4))})`; ctx.fillRect(0, 0, W, H); }
+}
+function rewindText(t) {
+  const a = prog(t, 4.2, 4.4) * (1 - prog(t, T(8) + 0.1, T(8) + 0.8)); if (a <= 0) return;
+  ctx.save(); ctx.globalAlpha *= a; const r = mulberry32(8 + Math.floor(t * 30)); for (let i = 0; i < 26; i++) { const y = 120 + r() * 760; ctx.fillStyle = `rgba(234,234,242,${0.04 + r() * 0.1})`; ctx.fillRect(0, y, W, 2 + r() * 5); } ctx.restore();
+  text('◀◀', 960, 440, { size: 150, weight: 700, color: C.goldHi, alpha: a }); text('6 月', 960, 600, { size: 150, family: F.serif, weight: 900, color: C.text, alpha: a });
+}
+
 // ---------- compose ----------
 function render(t, frame = Math.round(t * TL.fps)) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1;
   background(t, frame); dust(t, 0.45);
   bellsLayer(t);
-  sceneTitleCard(t);
+  hookLayer(t); rewindText(t);
   const O = { zin: 1, zout: 1, push: 0, nodrift: true };
   scene(t, 'A_cover', lt => sceneCover(lt, t), O);
   scene(t, 'B_ruler', lt => sceneRulers(lt, t), O);
@@ -622,9 +690,12 @@ function render(t, frame = Math.round(t * TL.fps)) {
   const L = (k, s2) => label(t, S[k][0] + 0.15, S[k][1] - 0.1, s2);
   L('A_cover', '谁 掀 开 了 布'); L('B_ruler', '收 入'); L('C_size', '估 值'); L('D_rope', '对 科 技 行 业 ①'); L('F_pull', '对 科 技 行 业 ②'); L('E_ring', '钟 响'); L('G_echo', '隐 忧'); L('J_end', '展 望');
   const s = (n0, n1, zh, en) => sub(t, T(n0) + 0.05, T(n1), zh, en);
-  s(4, 7.6, '两家 6 月都悄悄递了材料（OpenAI 为据报道）', 'Both filed quietly in June (OpenAI: reported).');
-  s(7.6, 10.7, 'Anthropic 10 月 26 日公开文件，掀开了布', 'Anthropic went public on Oct 26 — the cover is off.');
-  s(10.7, 14, '11 月 10 日启动路演；OpenAI 据报道最早 2027', 'Roadshow Nov 10; OpenAI reportedly not before 2027.');
+  sub(t, 1.3, 2.3, '一口钟，先响了', 'One bell rings first.');
+  sub(t, 2.4, 3.55, '这口钟，要顶着约 1.3 万亿美元的估值敲响', 'This bell is set to ring at about $1.3 trillion (reported).');
+  sub(t, 3.65, 4.3, '另一口钟，为什么还蒙着布？', 'And why is the other one still under wraps?');
+  sub(t, 4.35, T(10.2), '倒回 6 月：两口钟，都蒙着布（OpenAI 为据报道）', 'Rewind to June: both bells under wraps (OpenAI: reported).');
+  s(10.2, 12.4, 'Anthropic 10 月 26 日公开文件，掀开了布', 'Anthropic went public on Oct 26 — the cover is off.');
+  s(12.4, 14, '11 月 10 日启动路演；OpenAI 据报道最早 2027', 'Roadshow Nov 10; OpenAI reportedly not before 2027.');
   s(14, 18, '收入别直接比：两把尺子，刻度不一样', 'Don’t compare revenue head-on: two different rulers.');
   s(18, 23, 'Anthropic 按总额计，OpenAI 据报道只计自己那份', 'Gross for Anthropic; net for OpenAI (reported).');
   s(23, 26.5, '估值：Anthropic 5 月 9650 亿；OpenAI 3 月 8520 亿', 'Valuation: $965B (May) vs. OpenAI’s $852B (March).');
