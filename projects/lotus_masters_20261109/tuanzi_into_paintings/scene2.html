@@ -81,15 +81,15 @@ function drawCat(o){
 }
 </script>
 <script>
-const STY=['picasso','vangogh','munch','lichtenstein'],LAB=['毕加索 · 立体主义','梵高 · 旋转笔触','蒙克 · 呐喊','利希滕斯坦 · 波普'],LINES=['脸碎了。','晕。','啊。','吵。'],N12=['vangogh', 'matisse', 'kandinsky', 'monet', 'magritte', 'mondrian', 'klimt', 'schiele', 'pollock', 'picasso', 'munch', 'lichtenstein'],Z12=['梵高', '马蒂斯', '康定斯基', '莫奈', '马格利特', '蒙德里安', '克里姆特', '席勒', '波洛克', '毕加索', '蒙克', '利希滕斯坦'];
-const T_S0=1.6,SD=2.5,T_BOX=T_S0+SD*4,T_END=T_BOX+1.8;   // 1.6, 11.6, 13.4
+const STY=['vangogh','picasso','munch','lichtenstein'],LAB=['梵高 · 旋转笔触','毕加索 · 立体主义','蒙克 · 呐喊','利希滕斯坦 · 波普'],LINES=['晕。','脸碎了。','啊。','吵。'],N12=['vangogh', 'matisse', 'kandinsky', 'monet', 'magritte', 'mondrian', 'klimt', 'schiele', 'pollock', 'picasso', 'munch', 'lichtenstein'],Z12=['梵高', '马蒂斯', '康定斯基', '莫奈', '马格利特', '蒙德里安', '克里姆特', '席勒', '波洛克', '毕加索', '蒙克', '利希滕斯坦'];
+const T_S0=1.4,SD=1.8,T_BOX=T_S0+SD*4,T_END=T_BOX+1.6;   // 1.6, 11.6, 13.4
 const ease=t=>1-Math.pow(1-cl(t),3);
 ['shelf','door','chair','glow','fishW'].forEach(id=>{const e=$(id);if(e)e.setAttribute('display','none');});
 const cam=$('cam');
 // ---- room: framed painting on the wall (Van Gogh first, Lichtenstein after the cat comes back)
 cam.insertAdjacentHTML('beforeend',`<g id="wallart" transform="translate(540 585)"><path d="M-250 -490 L0 -640 L250 -490" fill="none" stroke="#3b2040" stroke-width="4"/><circle cx="0" cy="-640" r="9" fill="#e6c86e" stroke="#3b2040" stroke-width="4"/>
  <rect x="-378" y="-494" width="756" height="989" rx="22" fill="#e6c86e" stroke="#3b2040" stroke-width="8"/><rect x="-360" y="-476" width="720" height="953" rx="10" fill="#fff3dc" stroke="#3b2040" stroke-width="5"/>
- <image id="wa0" href="p/picasso.jpg" x="-350" y="-466" width="700" height="933"/><image id="wa1" href="p/lichtenstein.jpg" x="-350" y="-466" width="700" height="933" display="none"/></g>
+ <image id="wa0" href="p/vangogh.jpg" x="-350" y="-466" width="700" height="933"/><image id="wa1" href="p/lichtenstein.jpg" x="-350" y="-466" width="700" height="933" display="none"/></g>
  <g id="boxBack" display="none"><g transform="translate(-70 0)"><path d="M690 1560 L1030 1560 L1056 1480 L720 1480 Z" fill="#b98a55" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/></g></g>
  <g id="boxFront" display="none"><g transform="translate(-70 0)"><path d="M690 1600 L1030 1600 L1030 1840 L690 1840 Z" fill="#d6a56b" stroke="#3b2040" stroke-width="8" stroke-linejoin="round"/><rect x="822" y="1600" width="76" height="240" fill="#ecc98f" opacity=".8"/><rect x="930" y="1700" width="70" height="46" rx="5" fill="#fff3dc" stroke="#3b2040" stroke-width="4"/><path d="M940 1716 h50 M940 1732 h36" stroke="#3b2040" stroke-width="4"/><path d="M690 1600 L650 1555 L720 1535 L735 1600 Z" fill="#e0b57a" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/><path d="M1030 1600 L1072 1556 L1004 1535 L988 1600 Z" fill="#e0b57a" stroke="#3b2040" stroke-width="7" stroke-linejoin="round"/></g></g>`);
 // ---- stage: the painting "world" (full screen, pink wall bands + painting + stylised cat)
@@ -108,11 +108,11 @@ const subtxt=(el,txt,u,y,sz)=>{$(el).innerHTML=u>0?`<g transform="translate(540 
 function R(t){
  const o={x:540,y:1740,rot:0,sx:1.4,sy:1.4,shy:1752,shs:1.9,tail:5*Math.sin(t*2.3),eye:'half',mouth:'n',dx:0,dy:-8,blush:.5,phi:0,pw:0};
  o.sy*=1+0.012*Math.sin(t*5);
- const inStage=t>=1.3&&t<T_BOX+0.3;
+ const inStage=t>=1.1&&t<T_BOX+0.3;
  // ===== stage
  $('stage').setAttribute('display',inStage?'inline':'none');
  let stageOp=1,stageT='';
- if(t<T_S0){const u=ease((t-1.3)/0.3);stageOp=u;stageT=`translate(540 960) rotate(${(1-u)*-25}) scale(${0.5+0.5*u}) translate(-540 -960)`;}
+ if(t<T_S0){const u=ease((t-1.1)/0.3);stageOp=u;stageT=`translate(540 960) rotate(${(1-u)*-25}) scale(${0.5+0.5*u}) translate(-540 -960)`;}
  else if(t>=T_BOX){const u=ease((t-T_BOX)/0.3);stageOp=1-u;stageT=`translate(540 960) rotate(${u*25}) scale(${1+0.5*u}) translate(-540 -960)`;}
  $('stage').setAttribute('opacity',stageOp);$('stage').setAttribute('transform',stageT);
  if(inStage){
@@ -122,13 +122,13 @@ function R(t){
    else if(i==k-1&&u<0.2){x=-ease(u/0.2)*1080;}
    const el=$('sc'+i);if(x===null||(t<T_S0&&i>0))el.setAttribute('display','none');else{el.setAttribute('display','inline');el.setAttribute('transform',`translate(${x} 0)`);}
    if(x!==null){const fr=1+(Math.floor(t*8)%6);for(let q=1;q<=6;q++)$(`c${i}_${q}`).setAttribute('display',q==fr?'inline':'none');
-    const bob=4*Math.sin(t*4+i),rt=(i==1?7*Math.sin(t*3):i==0?3*Math.sin(t*9):0);
+    const bob=4*Math.sin(t*4+i),rt=(i==0?7*Math.sin(t*3):i==1?3*Math.sin(t*9):0);
     $('cg'+i).setAttribute('transform',`translate(0 ${bob}) rotate(${rt} 700 1530)`);}}
   // extras per scene
-  $('ex3').innerHTML=(k==3&&u>0.35)?`<g transform="translate(300 1150) rotate(-8)"><path d="M0 -70 L30 -40 L70 -60 L56 -20 L96 0 L52 14 L66 56 L26 36 L0 80 L-24 38 L-64 54 L-50 14 L-96 4 L-52 -22 L-66 -62 L-28 -42 Z" fill="#ffe04a" stroke="#0a0a0a" stroke-width="8" stroke-linejoin="round" transform="scale(${0.6+0.4*ease((u-0.35)/0.15)})"/><text text-anchor="middle" y="14" font-size="46" fill="#e4202a" stroke="#0a0a0a" stroke-width="5" paint-order="stroke">POW!</text></g>`:'';
+  $('ex3').innerHTML=(k==3&&u>0.4)?`<g transform="translate(300 1150) rotate(-8)"><path d="M0 -70 L30 -40 L70 -60 L56 -20 L96 0 L52 14 L66 56 L26 36 L0 80 L-24 38 L-64 54 L-50 14 L-96 4 L-52 -22 L-66 -62 L-28 -42 Z" fill="#ffe04a" stroke="#0a0a0a" stroke-width="8" stroke-linejoin="round" transform="scale(${0.6+0.4*ease((u-0.35)/0.15)})"/><text text-anchor="middle" y="14" font-size="46" fill="#e4202a" stroke="#0a0a0a" stroke-width="5" paint-order="stroke">POW!</text></g>`:'';
   // label + subtitle
   $('lab').innerHTML=`<rect x="190" y="30" width="700" height="64" rx="32" fill="#ffd566" stroke="#3b2040" stroke-width="6"/><text x="540" y="76" text-anchor="middle" font-size="38" fill="#3b2040">${LAB[k]}</text>`;
-  subtxt('sub2',LINES[k],ease((u-0.3)/0.12),1760,120);
+  subtxt('sub2',LINES[k],ease((u-0.2)/0.1),1760,120);
  } else {$('lab').innerHTML='';$('sub2').innerHTML='';}
  // ===== room
  const inBox=t>=T_BOX;
@@ -137,16 +137,16 @@ function R(t){
  $('sub').innerHTML='';
  let catVis=true;
  if(t<T_S0){
-   if(t<1.0){o.eye='half';o.mouth='n';subtxt('sub','又是荷花。',ease((t-0.3)/0.12),1165);}
-   else{const u=cl((t-1.0)/0.45),e=ease(u);o.x=L(540,540,e);o.y=L(1740,640,e)-190*Math.sin(Math.PI*u);o.sx=o.sy=L(1.4,0.3,e);o.rot=-300*e*0;o.pw=1;o.phi=t*4;o.eye='dot';o.mouth='w';o.shs=1.9*(1-e);}
-   if(t>=1.45)catVis=false;
+   if(t<0.8){o.eye='half';o.mouth='n';subtxt('sub','又是荷花。',ease((t-0.12)/0.1),1165);}
+   else{const u=cl((t-0.8)/0.4),e=ease(u);o.x=L(540,540,e);o.y=L(1740,640,e)-190*Math.sin(Math.PI*u);o.sx=o.sy=L(1.4,0.3,e);o.rot=-300*e*0;o.pw=1;o.phi=t*4;o.eye='dot';o.mouth='w';o.shs=1.9*(1-e);}
+   if(t>=1.2)catVis=false;
  } else if(t<T_BOX){catVis=false;}
  else{
    const u=t-T_BOX,e0=cl((u-0.15)/0.5),e=e0*e0;      // drops out of the painting into the box
    if(e0<1){o.x=L(540,790,sm(e0));o.y=L(640,1740,e)-120*Math.sin(Math.PI*e0);o.sx=o.sy=L(0.3,1.3,sm(e0));o.eye='dot';o.mouth='o';o.shs=1.9*e0;}
    else{o.x=790;o.y=1758+4*Math.sin(t*6)*Math.max(0,1-(u-0.65)*4);o.sx=o.sy=1.3;o.eye='c';o.mouth='n';o.blush=.95;o.shs=1.9;}
    if(u<0.15)catVis=false;
-   subtxt('sub','最爱:纸箱',ease((u-0.95)/0.12),1165);
+   subtxt('sub','最爱:纸箱',ease((u-0.8)/0.1),1165);
  }
  $('cat').setAttribute('display',catVis?'inline':'none');$('sh').setAttribute('display',catVis?'inline':'none');
  drawCat(o);

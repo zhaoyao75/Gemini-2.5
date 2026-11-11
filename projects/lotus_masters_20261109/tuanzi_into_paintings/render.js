@@ -1,5 +1,5 @@
 const { chromium } = require('playwright'); const path = require('path'); const fs = require('fs');
-const N = 450, FPS = 30, W = 6;
+const N = 360, FPS = 30, W = 6;
 (async () => {
   fs.mkdirSync('frames', { recursive: true });
   const only = process.argv[2] ? process.argv[2].split(',').map(Number) : null;
