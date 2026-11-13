@@ -57,6 +57,10 @@ def bell(f=2637):
     return sum(a*np.sin(2*np.pi*f*r*t)*np.exp(-t*d) for r, a, d in
                [(1, 1, 2.2), (2.76, .5, 3.5), (5.4, .25, 6), (1.003, .6, 2.0)])
 
+def drum(f0=95, d=0.5):
+    t = np.arange(int(d * SR)) / SR
+    return np.sin(2*np.pi*(f0*t + 25*(1-np.exp(-t*30))/30)) * np.exp(-t*9) + rng.standard_normal(len(t))*np.exp(-t*120)*.3
+
 T = lambda bar, beat: START + (bar * 4 + beat) * BEAT
 
 def gliss(t_land, notes, g0=0.11, g1=0.26, step=0.030):
