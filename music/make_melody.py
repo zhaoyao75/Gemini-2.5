@@ -1,5 +1,5 @@
 """9 秒可循环东方旋律《清风》 — D 宫五声音阶。
-双笛 + 低八度笛 + 古筝 + 琵琶 + 笙 + 大阮低音 + 堂鼓 + 木鱼 + 碰铃。
+双笛 + 古筝（流水分解和弦）+ 琵琶轮指 + 笙 + 大阮低音 + 堂鼓 + 碰铃。
 一个动机模进一次再收束；尾音与混响折回开头，首尾无缝。纯 numpy 合成。"""
 import numpy as np, wave
 
@@ -41,7 +41,7 @@ def dizi(m, dur, vib=True, grace=None, det=0.0):
     if vib:
         f = f * (1 + 0.0055 * np.sin(2 * np.pi * 5.6 * t) * np.clip((t - .22) * 3.5, 0, 1))
     ph = 2 * np.pi * np.cumsum(f) / SR
-    amps = [1, .62, .40, .30, .14, .12, .05, .05]
+    amps = [1, .70, .50, .40, .26, .20, .12, .10, .06]   # 笛膜的亮色
     out = sum(a * np.sin((k + 1) * ph) for k, a in enumerate(amps) if hz(m) * (k + 1) < 10000)
     noise = rng.standard_normal(n); noise = np.convolve(noise, np.ones(6) / 6, 'same')
     noise = noise - np.convolve(noise, np.ones(60) / 60, 'same')
@@ -94,46 +94,45 @@ MEL = {
 for bar, notes in MEL.items():
     for b, d, m, g in notes:
         L_ = d * BEAT * 0.98; acc = 1.12 if b in (0, 2) or d > 1 else 1.0
-        for det, pan in [(-4, 0.02), (4, 0.38)]:                               # 双笛齐奏（微分音差）→ 合奏感
-            put(dizi(m, L_, vib=d >= 1, grace=g, det=det), T(bar, b), pan=pan, gain=0.29 * acc)
-        put(dizi(m - 12, L_, vib=d >= 1, det=3), T(bar, b), pan=-0.1, gain=0.24)   # 低八度笛（箫的位置）加厚
-        put(pluck(m - 12, 2.0, bright=1.1, vib=0.005 if d >= 1 else 0), T(bar, b), pan=-0.15, gain=0.26)  # 古筝齐奏旋律
-        if d >= 1:                                                             # 长音：琵琶轮指
+        for det, pan in [(-4, 0.02), (4, 0.38)]:                               # 双笛齐奏
+            put(dizi(m, L_, vib=d >= 1, grace=g, det=det), T(bar, b), pan=pan, gain=0.30 * acc)
+        put(pluck(m, 2.0, bright=1.3, vib=0.005 if d >= 1 else 0), T(bar, b), pan=-0.15, gain=0.22)   # 古筝同度齐奏，音头清亮
+        if d >= 1:                                                             # 长音：琵琶轮指托住
             for i in range(int(L_ / 0.1)):
-                put(pluck(m - 12, .45, bright=1.5, decay=3.4, bend=0.002), T(bar, b) + i * 0.1, pan=0.5, gain=0.13)
-        else:
-            put(pluck(m - 12, .8, bright=1.5, decay=2.6, bend=0.004), T(bar, b), pan=0.5, gain=0.18)
+                put(pluck(m - 12, .45, bright=1.6, decay=3.2, bend=0.002), T(bar, b) + i * 0.1, pan=0.5, gain=0.15)
 
-# ---- 笙：和声长音垫底（D – Bm – Esus/A – D）----
+# ---- 笙：和声长音（D – Bm – Esus/A – D），比上一稿轻 ----
 for bar, b, d, chord in [(0, 0, 4, [50, 57, 62, 66, 69]), (1, 0, 4, [47, 54, 59, 62, 66]),
                          (2, 0, 2, [52, 59, 64, 69]), (2, 2, 2, [45, 57, 59, 64]), (3, 0, 4, [50, 57, 62, 66, 69])]:
     for m in chord:
-        put(sheng(m, d * BEAT), T(bar, b), pan=0.15 * ((m % 3) - 1), gain=0.085 if m > 52 else 0.11)
+        put(sheng(m, d * BEAT), T(bar, b), pan=0.15 * ((m % 3) - 1), gain=0.085 if m > 52 else 0.12)
 
-# ---- 低音：1、3 拍根音，小节末八分音符推进 ----
-for bar, pat in {0: [(0, 38), (2, 38), (3.5, 33)], 1: [(0, 35), (2, 35), (3.5, 35)],
-                 2: [(0, 40), (2, 33), (3.5, 33)], 3: [(0, 38), (2, 38)]}.items():
-    for b, m in pat: put(bass(m, 1.5 if b != 3.5 else .5), T(bar, b), gain=0.50 if b != 3.5 else 0.34)
+# ---- 低音：只在 1、3 拍落根音，稳住重心 ----
+for bar, (m1, m2) in enumerate([(38, 38), (35, 35), (40, 33), (38, 38)]):
+    put(bass(m1, 1.6), T(bar, 0), gain=0.48); put(bass(m2, 1.6), T(bar, 2), gain=0.40)
 
-# ---- 古筝：平稳的八分音符分解和弦 ----
-ARP = {0: [50,57,62,66,57,62,66,62], 1: [47,54,59,62,54,59,62,59],
-       2: [52,59,64,69,45,52,57,64], 3: [50,57,62,66,None,None,None,None]}
-for bar, arp in ARP.items():
-    for i, m in enumerate(arp):
-        if m: put(pluck(m, 2.3, bright=1.0), T(bar, i * .5), pan=-0.4, gain=0.40 if i % 4 == 0 else 0.21)
+# ---- 古筝：十六分音符"流水"分解和弦，连绵流动 ----
+WAVE = {'D': [50,57,62,66,69,66,62,57], 'Bm': [47,54,59,62,66,62,59,54],
+        'E': [52,59,64,69,71,69,64,59], 'A': [45,52,57,59,64,59,57,52]}
+for bar, (c1, c2) in enumerate([('D', 'D'), ('Bm', 'Bm'), ('E', 'A'), ('D', None)]):
+    for h, c in enumerate([c1, c2]):
+        if c is None: continue
+        for i, m in enumerate(WAVE[c]):
+            put(pluck(m, 2.0, bright=1.35), T(bar, h * 2 + i * .25), pan=-0.45 + 0.06 * i,
+                gain=0.30 if i == 0 else (0.17 if i % 2 == 0 else 0.13))
 
-# ---- 打击：鼓在 1、3 拍，木鱼在 2、4 拍，律动固定 ----
+# ---- 打击：只留每小节第一拍的堂鼓和第三拍的轻点，不用木鱼 ----
 for bar in range(4):
-    put(drum(82, .7), T(bar, 0), gain=0.42); put(drum(82, .6), T(bar, 2), gain=0.26 if bar < 3 else 0.46)
-    for b in (1, 3): put(woodblock(740), T(bar, b), pan=0.3, gain=0.07)
-for k, b in enumerate([3.5, 3.75]): put(drum(125, .25), T(3, b), gain=0.12 + 0.08 * k)
+    put(drum(78, .8), T(bar, 0), gain=0.40)
+    put(drum(78, .6), T(bar, 2), gain=0.14 if bar < 3 else 0.42)
 
-# ---- 点睛：只在两处刮奏 —— 冲向顶点、送回开头 ----
+# ---- 点睛：两处刮奏 —— 冲向顶点、送回开头 ----
 gliss(T(1, 1), [69, 71, 74, 76, 78, 81, 83, 86], .10, .26)
 gliss(T(4, 0), [62, 64, 66, 69, 71, 74, 76], .10, .24)
+put(bell(), T(0, 0), pan=0.1, gain=0.035)
 put(bell(), T(1, 1), pan=-0.1, gain=0.05)
-for k, (m, g) in enumerate([(50, .40), (57, .30), (62, .32), (66, .28), (74, .30)]):       # 收束处全体和弦
-    put(pluck(m, 2.6, bright=1.0, vib=0.004), T(3, 2) + k * 0.012, pan=-0.4 + k * 0.1, gain=g)
+for k, (m, g) in enumerate([(50, .40), (57, .30), (62, .32), (66, .28), (74, .30), (86, .20)]):   # 收束处全体和弦
+    put(pluck(m, 2.6, bright=1.2, vib=0.004), T(3, 2) + k * 0.012, pan=-0.4 + k * 0.1, gain=g)
 put(bell(), T(3, 2), pan=0.1, gain=0.045)
 
 # ---- 混响（厅堂感）----
@@ -145,6 +144,13 @@ def reverb(x, seed):
     return np.fft.irfft(F, m)[:len(x)] * 0.027
 L2 = L + reverb(L, 1) * 0.9 + reverb(R, 3) * 0.3
 R2 = R + reverb(R, 2) * 0.9 + reverb(L, 4) * 0.3
+
+# ---- 总线均衡：提亮高频、收一点中低频的浑浊 ----
+def eq(x):
+    f = np.fft.rfftfreq(len(x), 1 / SR)
+    g_db = 6.0 / (1 + (2600 / np.maximum(f, 1)) ** 2) - 1.0 * np.exp(-(np.log2(np.maximum(f, 1) / 320)) ** 2 / 0.5)
+    return np.fft.irfft(np.fft.rfft(x) * 10 ** (g_db / 20), len(x))
+L2, R2 = eq(L2), eq(R2)
 
 # ---- 无缝循环：把 9 秒之后的余音折回开头 ----
 out = np.stack([L2[:N], R2[:N]], 1).copy()
